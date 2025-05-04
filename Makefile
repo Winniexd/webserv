@@ -30,10 +30,11 @@ $(NAME): $(OBJ)
 	@echo "$(BLUE)done$(RESET)"
 	$(eval COUNT := $(shell echo $$(( $(COUNT) + 1 ))))
 	@BAR=$$(printf "%0.s#" $$(seq 1 $(COUNT))); \
-	SPACES=$$(printf "%0.s" $$(seq 1 $$(( $(TOTAL) - $(COUNT))))); \
+	N=$$(( $(TOTAL) - $(COUNT) )); \
+	SPACES=""; \
+	if [ $$N -gt 0 ]; then SPACES=$$(printf "%0.s " $$(seq 1 $$N)); fi; \
 	PERCENT=$$(( 100 * $(COUNT) / $(TOTAL) )); \
-	printf "\033[2K\r[\033[1;32m$$BAR$$SPACES\033[0m] $$PERCENT%%"
-
+	printf "[\033[1;32m$$BAR$$SPACES\033[0m] $$PERCENT%%"
 
 clean:
 	@rm -rf $(OBJ)

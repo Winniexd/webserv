@@ -16,9 +16,14 @@ Server::Server() {};
 
 Server::~Server() {};
 
-Server::Server(const Server& rhs) {};
+Server::Server(const Server& rhs) {
+    *this = rhs;
+};
 
-Server& Server::operator=(const Server& src) {return *this;}
+Server& Server::operator=(const Server& src) {
+    *this = src;
+    return *this;
+}
 
 int Server::init() {
     this->fd = socket(AF_INET, SOCK_STREAM, 0);

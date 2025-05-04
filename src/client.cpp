@@ -13,7 +13,11 @@
 #include "webserv.hpp"
 #include <cstring>
 
-int main() {
+int main(int argc, char **argv) {
+    if (argc != 2) {
+        std::cout << "Usage: " << argv[0] << " [MESSAGE]" << std::endl;
+        return 1;
+    }
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
     sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
@@ -21,7 +25,6 @@ int main() {
     serverAddress.sin_addr.s_addr = INADDR_ANY;
 
     connect(clientSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress));
-    const char* message = "Hello, server!";
-    send(clientSocket, message, strlen(message), 0);
+    send(clientSocket, argv[1], strlen(argv[1]), 0);
     close(clientSocket);
 }

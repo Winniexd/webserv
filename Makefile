@@ -1,50 +1,30 @@
-#COMPILER
 NAME = webserv
-CXX=c++
-CFLAGS = -Wall -Wextra -Werror -std=c++98 -g
 
-#FILES
-INC = -Iinc/
-FILES = main.cpp Server.cpp
-SRCS = $(addprefix src/, $(FILES))
-OBJ = $(SRCS:.cpp=.o)
+CXX = c++
+CXXFLAGS = -Wall -Wextra -Werror -std=c++98
 
-#ANSI COLOR CODES
-BLUE = \e[0;34m
-GREEN = \e[0;32m
-RESET = \e[0m
+SRC_DIR = src
+INC_DIR = include
+OBJ_DIR = obj
 
-#PERCENTAGE BAR
-COUNT = 0
-TOTAL = $(words $(SRCS))
+SRCS = $(wildcard $(SRC_DIR)/*.cpp)
+OBJS = $(SRCS:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 
 all: $(NAME)
 
-$(NAME): $(OBJ)
-	@$(CXX) $(CFLAGS) $(OBJ) $(INC) -o $(NAME)
-	@printf "$(GREEN)\nCompilation complete!\n$(RESET)"
+$(NAME): $(OBJS)
+	$(CXX) $(CXXFLAGS) $(OBJS) -o $(NAME)
 
-%.o: %.cpp
-	@echo -n "\033[2K\rCompiling $< ... "
-	@$(CXX) $(CFLAGS) $(INC) -c $< -o $@
-	@echo "$(BLUE)done$(RESET)"
-	$(eval COUNT := $(shell echo $$(( $(COUNT) + 1 ))))
-	@BAR=$$(printf "%0.s#" $$(seq 1 $(COUNT))); \
-	N=$$(( $(TOTAL) - $(COUNT) )); \
-	SPACES=""; \
-	if [ $$N -gt 0 ]; then SPACES=$$(printf "%0.s " $$(seq 1 $$N)); fi; \
-	PERCENT=$$(( 100 * $(COUNT) / $(TOTAL) )); \
-	printf "[\033[1;32m$$BAR$$SPACES\033[0m] $$PERCENT%%"
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -I$(INC_DIR) -c $< -o $@
 
 clean:
-	@rm -rf $(OBJ)
+	rm -rf $(OBJ_DIR)
 
-fclean:
-	@make clean
-	@rm -rf $(NAME)
+fclean: clean
+	rm -f $(NAME)
 
-re: 
-	@make fclean
-	@make all
+re: fclean all
 
 .PHONY: all clean fclean re

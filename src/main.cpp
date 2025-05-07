@@ -30,51 +30,58 @@ int main() {
         
         // Boucle principale du serveur
         while (true) {
-            // Structure pour stocker l'adresse du client
-            struct sockaddr_in client_addr;
-            socklen_t client_len = sizeof(client_addr);
+            // Attendre un événement avec poll
+            int events = server.wait_for_event(1000);
             
-            // Accepter une nouvelle connexion
-            int client_fd = accept(server.get_fd(), 
-                                 (struct sockaddr*)&client_addr, 
-                                 &client_len);
-            
-            if (client_fd > 0) {
-                // SECTION CRITIQUE: Gestion des requêtes client
-                std::cout << "New connection accepted" << std::endl;
-                
-                // Lecture de la requête
-                char buffer[1024] = {0};
-                recv(client_fd, buffer, sizeof(buffer), 0);
-                
-                try {
-                    // Lecture et envoi du fichier index.html
-                    std::string content = read_file(base_path + "/index.html");
+            if (events > 0) {
+                if (server.can_read()) {
+                    // Structure pour stocker l'adresse du client
+                    struct sockaddr_in client_addr;
+                    socklen_t client_len = sizeof(client_addr);
                     
-                    // Construction de la réponse HTTP
-                    std::stringstream ss;
-                    ss << content.length();
-                    std::string response = "HTTP/1.1 200 OK\r\n"
-                                         "Content-Type: text/html\r\n"
-                                         "Content-Length: " + 
-                                         ss.str() + 
-                                         "\r\n\r\n" + content;
+                    // Accepter une nouvelle connexion
+                    int client_fd = accept(server.get_fd(), 
+                                         (struct sockaddr*)&client_addr, 
+                                         &client_len);
                     
-                    send(client_fd, response.c_str(), response.length(), 0);
-                } catch (const std::exception& e) {
-                    // Gestion des erreurs - envoi d'une page 404
-                    std::string error_response = "HTTP/1.1 404 Not Found\r\n"
-                                               "Content-Type: text/plain\r\n"
-                                               "Content-Length: 13\r\n\r\n"
-                                               "404 Not Found";
-                    send(client_fd, error_response.c_str(), 
-                         error_response.length(), 0);
+                    if (client_fd > 0) {
+                        // SECTION CRITIQUE: Gestion des requêtes client
+                        std::cout << "New connection accepted" << std::endl;
+                        
+                        // Lecture de la requête
+                        char buffer[1024] = {0};
+                        recv(client_fd, buffer, sizeof(buffer), 0);
+                        
+                        try {
+                            // Lecture et envoi du fichier index.html
+                            std::string content = read_file(base_path + "/index.html");
+                            
+                            // Construction de la réponse HTTP
+                            std::stringstream ss;
+                            ss << content.length();
+                            std::string response = "HTTP/1.1 200 OK\r\n"
+                                                 "Content-Type: text/html\r\n"
+                                                 "Content-Length: " + 
+                                                 ss.str() + 
+                                                 "\r\n\r\n" + content;
+                            
+                            send(client_fd, response.c_str(), response.length(), 0);
+                        } catch (const std::exception& e) {
+                            // Gestion des erreurs - envoi d'une page 404
+                            std::string error_response = "HTTP/1.1 404 Not Found\r\n"
+                                                       "Content-Type: text/plain\r\n"
+                                                       "Content-Length: 13\r\n\r\n"
+                                                       "404 Not Found";
+                            send(client_fd, error_response.c_str(), 
+                                 error_response.length(), 0);
+                        }
+                        
+                        close(client_fd);
+                    }
                 }
-                
-                close(client_fd);
             }
             
-            usleep(1000); // Évite la surcharge CPU
+            // Pas besoin de usleep car poll gère déjà le timing
         }
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;

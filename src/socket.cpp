@@ -6,7 +6,7 @@
 /*   By: rpepi <rpepi@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/26 17:15:42 by pepi              #+#    #+#             */
-/*   Updated: 2025/05/07 12:09:59 by rpepi            ###   ########.fr       */
+/*   Updated: 2025/05/07 12:19:28 by rpepi            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -52,6 +52,11 @@ void Socket::create_socket() {
         throw std::runtime_error("Failed to create socket"); // Erreur si la création échoue
     }
     
+    // Configure poll
+    poll_fd_.fd = fd_;
+    poll_fd_.events = POLLIN | POLLOUT;
+    poll_fd_.revents = 0;
+    
     // Configure l'option SO_REUSEADDR pour permettre la réutilisation de l'adresse
     int opt = 1;
     if (setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
@@ -78,4 +83,16 @@ void Socket::listen_socket() {
     if (listen(fd_, SOMAXCONN) < 0) {
         throw std::runtime_error("Failed to listen on socket"); // Erreur si l'écoute échoue
     }
+}
+
+int Socket::wait_for_event(int timeout_ms) {
+    return poll(&poll_fd_, 1, timeout_ms);
+}
+
+bool Socket::can_read() const {
+    return (poll_fd_.revents & POLLIN);
+}
+
+bool Socket::can_write() const {
+    return (poll_fd_.revents & POLLOUT);
 }

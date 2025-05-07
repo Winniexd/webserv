@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <sys/ioctl.h> // For ioctl function
+#include <sys/poll.h>
 
 class Socket {
 public:
@@ -24,6 +25,11 @@ public:
     
     // Configure le socket en mode non-bloquant
     void set_non_blocking();
+    
+    // Ajouter ces méthodes
+    int wait_for_event(int timeout_ms = -1);
+    bool can_read() const;
+    bool can_write() const;
 
 private:
     int fd_;          // Descripteur de fichier du socket
@@ -34,6 +40,8 @@ private:
     void create_socket();   // Crée le socket
     void bind_socket();     // Lie le socket à l'adresse
     void listen_socket();   // Met le socket en mode écoute
+
+    struct pollfd poll_fd_;
 };
 
 #endif

@@ -6,12 +6,12 @@
 /*   By: rpepi <rpepi@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/26 17:15:42 by pepi              #+#    #+#             */
-/*   Updated: 2025/05/07 12:03:38 by rpepi            ###   ########.fr       */
+/*   Updated: 2025/05/07 12:09:59 by rpepi            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../includes/Socket.hpp"
-#include <unistd.h>
+
 
 // Constructeur de la classe Socket
 // Initialise le socket, le configure en mode non-bloquant, le lie à une adresse et commence à écouter
@@ -38,14 +38,9 @@ int Socket::get_fd() const {
 
 // Configure le socket en mode non-bloquant
 void Socket::set_non_blocking() {
-    // Récupère les flags actuels du socket
-    int flags = fcntl(fd_, F_GETFL, 0);
-    if (flags == -1) {
-        throw std::runtime_error("Failed to get socket flags"); // Erreur si impossible de récupérer les flags
-    }
-    // Ajoute le flag O_NONBLOCK pour rendre le socket non-bloquant
-    if (fcntl(fd_, F_SETFL, flags | O_NONBLOCK) == -1) {
-        throw std::runtime_error("Failed to set socket non-blocking"); // Erreur si impossible de configurer
+    int flags = 1; // 1 pour activer le mode non-bloquant
+    if (ioctl(fd_, FIONBIO, &flags) == -1) {
+        throw std::runtime_error("Failed to set socket non-blocking using ioctl");
     }
 }
 

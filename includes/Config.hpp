@@ -4,6 +4,10 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <cstdlib>
 
 // Structure pour les configurations de route
 struct Location {

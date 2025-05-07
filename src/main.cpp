@@ -5,6 +5,8 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <cstdlib> // For getenv
+#include <sstream> // For stringstream
 
 // Fonction utilitaire pour lire un fichier
 std::string read_file(const std::string& path) {
@@ -24,7 +26,7 @@ int main() {
         std::cout << "Server is running on http://127.0.0.1:8080" << std::endl;
         
         // Définition du chemin de base pour les fichiers statiques
-        std::string base_path = std::string(getenv("HOME")) + "/webserv/www";
+        std::string base_path = "/home/rpepi/github/webserv/www";
         
         // Boucle principale du serveur
         while (true) {
@@ -50,10 +52,12 @@ int main() {
                     std::string content = read_file(base_path + "/index.html");
                     
                     // Construction de la réponse HTTP
+                    std::stringstream ss;
+                    ss << content.length();
                     std::string response = "HTTP/1.1 200 OK\r\n"
                                          "Content-Type: text/html\r\n"
                                          "Content-Length: " + 
-                                         std::to_string(content.length()) + 
+                                         ss.str() + 
                                          "\r\n\r\n" + content;
                     
                     send(client_fd, response.c_str(), response.length(), 0);

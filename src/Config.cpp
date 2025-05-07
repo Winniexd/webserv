@@ -3,17 +3,15 @@
 /*                                                        :::      ::::::::   */
 /*   Config.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: pepi <pepi@student.42.fr>                  +#+  +:+       +#+        */
+/*   By: rpepi <rpepi@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/26 14:03:44 by pepi              #+#    #+#             */
-/*   Updated: 2025/04/28 15:47:39 by pepi             ###   ########.fr       */
+/*   Updated: 2025/05/07 12:01:55 by rpepi            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../includes/Config.hpp"
-#include <fstream>
-#include <sstream>
-#include <iostream>
+
 
 //constructeur par def
 Config::Config(const std::string& file_path) {
@@ -86,8 +84,8 @@ void Config::parse_file(const std::string& file_path) {
                 std::string host;
                 iss >> host;
                 // Supprimer le point-virgule s'il existe
-                if (!host.empty() && host.back() == ';') {
-                    host.pop_back();
+                if (!host.empty() && host[host.size() - 1] == ';') { // Replace host.back() with host[host.size() - 1]
+                    host.erase(host.size() - 1); // Replace host.pop_back() with host.erase(host.size() - 1)
                 }
                 current_server.host = host;
             } else if (key == "server_name") {

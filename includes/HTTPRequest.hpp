@@ -25,7 +25,7 @@ private:
     void parse_request(const std::string& raw_request);
 };
 
-// Global function declarations - moved after HTTPRequest class definition
+
 std::string read_file(const std::string& path);
 std::string create_http_response(const std::string& content, const std::string& content_type = "text/html");
 std::string create_error_response(int status_code, const std::string& message);

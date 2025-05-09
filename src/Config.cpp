@@ -6,29 +6,24 @@
 /*   By: rpepi <rpepi@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/26 14:03:44 by pepi              #+#    #+#             */
-/*   Updated: 2025/05/07 12:01:55 by rpepi            ###   ########.fr       */
+/*   Updated: 2025/05/09 14:07:43 by rpepi            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../includes/Config.hpp"
 
-
-//constructeur par def
 Config::Config(const std::string& file_path) {
     parse_file(file_path);
 }
 
-//fonction get servers
 const std::vector<ServerConfig>& Config::get_servers() const {
     return servers_;
 }
 
-//fonction parse file
 void Config::parse_file(const std::string& file_path) {
     std::ifstream file(file_path.c_str());
     if (!file.is_open()) {
-        std::cerr << "Error: Cannot open config file: " << file_path << std::endl;
-        exit(1);
+        throw std::runtime_error("Cannot open config file: " + file_path);
     }
 
     std::string line;
@@ -37,7 +32,6 @@ void Config::parse_file(const std::string& file_path) {
     std::string current_block;
 
     while (std::getline(file, line)) {
-        // Supprimer les espaces et commentaires
         size_t comment_pos = line.find('#');
         if (comment_pos != std::string::npos)
             line = line.substr(0, comment_pos);
@@ -47,7 +41,6 @@ void Config::parse_file(const std::string& file_path) {
         if (line.empty())
             continue;
 
-        // Détecter les blocs
         if (line.find("server {") != std::string::npos) {
             current_block = "server";
             current_server = ServerConfig();
@@ -72,8 +65,7 @@ void Config::parse_file(const std::string& file_path) {
             continue;
         }
 
-        // Parser les directives
-        std::istringstream iss(line); // transforme la ligne en flux
+        std::istringstream iss(line);
         std::string key;
         iss >> key;
 
@@ -83,9 +75,8 @@ void Config::parse_file(const std::string& file_path) {
             } else if (key == "host") {
                 std::string host;
                 iss >> host;
-                // Supprimer le point-virgule s'il existe
-                if (!host.empty() && host[host.size() - 1] == ';') { // Replace host.back() with host[host.size() - 1]
-                    host.erase(host.size() - 1); // Replace host.pop_back() with host.erase(host.size() - 1)
+                if (!host.empty() && host[host.size() - 1] == ';') {
+                    host.erase(host.size() - 1);
                 }
                 current_server.host = host;
             } else if (key == "server_name") {
@@ -102,12 +93,20 @@ void Config::parse_file(const std::string& file_path) {
             std::string path = current_server.locations.rbegin()->first;
             Location& loc = current_server.locations[path];
             if (key == "root") {
-                iss >> loc.root;
+                std::string root;
+                iss >> root;
+                if (!root.empty() && root[root.size() - 1] == ';') {
+                    root.erase(root.size() - 1);
+                }
+                loc.root = root;
             } else if (key == "index") {
                 iss >> loc.index;
             } else if (key == "methods") {
                 std::string method;
                 while (iss >> method) {
+                    if (!method.empty() && method[method.size() - 1] == ';') {
+                        method.erase(method.size() - 1);
+                    }
                     loc.methods.push_back(method);
                 }
             } else if (key == "upload") {
@@ -119,6 +118,5 @@ void Config::parse_file(const std::string& file_path) {
             }
         }
     }
-
     file.close();
 }

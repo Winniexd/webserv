@@ -1,89 +1,110 @@
 #include "../includes/Socket.hpp"
+#include "../includes/Config.hpp"
+#include "../includes/HTTPRequest.hpp"
 #include <iostream>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <fstream>
 #include <sstream>
 #include <string>
-#include <cstdlib> // For getenv
-#include <sstream> // For stringstream
 
-// Fonction utilitaire pour lire un fichier
-std::string read_file(const std::string& path) {
-    std::ifstream file(path.c_str());
-    if (!file.is_open()) {
-        throw std::runtime_error("Cannot open file: " + path);
-    }
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    return buffer.str();
-}
 
 int main() {
     try {
-        // Initialisation du serveur
-        Socket server(8080, "127.0.0.1");
-        std::cout << "Server is running on http://127.0.0.1:8080" << std::endl;
+        Config config("config/default.conf");
+        const std::vector<ServerConfig>& servers = config.get_servers();
         
-        // Définition du chemin de base pour les fichiers statiques
-        std::string base_path = "/home/rpepi/github/webserv/www";
+        if (servers.empty()) {
+            throw std::runtime_error("No server configurations found");
+        }
+
+        const ServerConfig& server_config = servers[0];
+        Socket server(server_config.port, server_config.host);
         
-        // Boucle principale du serveur
+        char cwd[1024];
+        if (getcwd(cwd, sizeof(cwd)) == NULL) {
+            throw std::runtime_error("Cannot get current working directory");
+        }
+
+        std::string root_path = server_config.locations.at("/").root;
+        if (!root_path.empty() && root_path[root_path.size() - 1] == ';') {
+            root_path.erase(root_path.size() - 1);
+        }
+
+        std::string base_path = std::string(cwd) + root_path;
+        std::cout << "Server running at http://" << server_config.host 
+                  << ":" << server_config.port << std::endl;
+
         while (true) {
-            // Attendre un événement avec poll
-            int events = server.wait_for_event(1000);
-            
-            if (events > 0) {
-                if (server.can_read()) {
-                    // Structure pour stocker l'adresse du client
-                    struct sockaddr_in client_addr;
-                    socklen_t client_len = sizeof(client_addr);
+            if (server.wait_for_event(1000) > 0 && server.can_read()) {
+                struct sockaddr_in client_addr;
+                socklen_t client_len = sizeof(client_addr);
+                
+                int client_fd = accept(server.get_fd(), 
+                                     (struct sockaddr*)&client_addr, 
+                                     &client_len);
+                
+                if (client_fd > 0) {
+                    char buffer[4096] = {0};
+                    recv(client_fd, buffer, sizeof(buffer), 0);
                     
-                    // Accepter une nouvelle connexion
-                    int client_fd = accept(server.get_fd(), 
-                                         (struct sockaddr*)&client_addr, 
-                                         &client_len);
-                    
-                    if (client_fd > 0) {
-                        // SECTION CRITIQUE: Gestion des requêtes client
-                        std::cout << "New connection accepted" << std::endl;
+                    try {
+                        HTTPRequest request(buffer);
+                        std::string method = request.get_method();
+                        std::string path = request.get_path();
                         
-                        // Lecture de la requête
-                        char buffer[1024] = {0};
-                        recv(client_fd, buffer, sizeof(buffer), 0);
+                        // Add debug output
+                        std::cout << "Received " << method << " request for " << path << std::endl;
                         
-                        try {
-                            // Lecture et envoi du fichier index.html
-                            std::string content = read_file(base_path + "/index.html");
-                            
-                            // Construction de la réponse HTTP
-                            std::stringstream ss;
-                            ss << content.length();
-                            std::string response = "HTTP/1.1 200 OK\r\n"
-                                                 "Content-Type: text/html\r\n"
-                                                 "Content-Length: " + 
-                                                 ss.str() + 
-                                                 "\r\n\r\n" + content;
-                            
-                            send(client_fd, response.c_str(), response.length(), 0);
-                        } catch (const std::exception& e) {
-                            // Gestion des erreurs - envoi d'une page 404
-                            std::string error_response = "HTTP/1.1 404 Not Found\r\n"
-                                                       "Content-Type: text/plain\r\n"
-                                                       "Content-Length: 13\r\n\r\n"
-                                                       "404 Not Found";
-                            send(client_fd, error_response.c_str(), 
-                                 error_response.length(), 0);
+                        // Check if method is allowed for this location
+                        std::string location = "/";
+                        const Location& loc = server_config.locations.at(location);
+                        
+                        // Debug output for allowed methods
+                        std::cout << "Allowed methods: ";
+                        std::vector<std::string>::const_iterator debug_it;
+                        for (debug_it = loc.methods.begin(); debug_it != loc.methods.end(); ++debug_it) {
+                            std::cout << *debug_it << " ";
+                        }
+                        std::cout << std::endl;
+                        
+                        bool method_allowed = false;
+                        std::vector<std::string>::const_iterator it;
+                        for (it = loc.methods.begin(); it != loc.methods.end(); ++it) {
+                            if (*it == method) {
+                                method_allowed = true;
+                                break;
+                            }
                         }
                         
-                        close(client_fd);
+                        if (!method_allowed) {
+                            std::string error = create_error_response(405, "Method Not Allowed");
+                            send(client_fd, error.c_str(), error.length(), 0);
+                        }
+                        else if (method == "GET") {
+                            handle_get_request(path, client_fd, base_path);
+                        }
+                        else if (method == "POST") {
+                            handle_post_request(request, client_fd, base_path);
+                        }
+                        else if (method == "DELETE") {
+                            handle_delete_request(path, client_fd, base_path);
+                        }
+                        else {
+                            std::string error = create_error_response(501, "Not Implemented");
+                            send(client_fd, error.c_str(), error.length(), 0);
+                        }
                     }
+                    catch (const std::exception& e) {
+                        std::string error = create_error_response(500, "Internal Server Error");
+                        send(client_fd, error.c_str(), error.length(), 0);
+                    }
+                    close(client_fd);
                 }
             }
-            
-            // Pas besoin de usleep car poll gère déjà le timing
         }
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }

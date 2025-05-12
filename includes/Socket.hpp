@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h> // For ioctl function
 #include <sys/poll.h>
+#include <vector>
 
 class Socket {
 public:
@@ -27,21 +28,22 @@ public:
     void set_non_blocking();
     
     // Ajouter ces méthodes
-    int wait_for_event(int timeout_ms = -1);
-    bool can_read() const;
-    bool can_write() const;
+    void add_to_poll(int fd);              // Ajoute un FD à surveiller
+    void remove_from_poll(int fd);         // Retire un FD
+    int wait_for_events(int timeout_ms);   // Surveille tous les FDs
+    bool can_read(int fd) const;           // Vérifie si on peut lire
+    bool can_write(int fd) const;          // Vérifie si on peut écrire
 
 private:
     int fd_;          // Descripteur de fichier du socket
     int port_;        // Port d'écoute
     std::string host_; // Adresse IP
+    std::vector<struct pollfd> poll_fds_;  // Vector pour tous les FDs à surveiller
     
     // Méthodes privées pour l'initialisation du socket
     void create_socket();   // Crée le socket
     void bind_socket();     // Lie le socket à l'adresse
     void listen_socket();   // Met le socket en mode écoute
-
-    struct pollfd poll_fd_;
 };
 
 #endif

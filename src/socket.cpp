@@ -6,7 +6,7 @@
 /*   By: rpepi <rpepi@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/26 17:15:42 by pepi              #+#    #+#             */
-/*   Updated: 2025/05/07 12:19:28 by rpepi            ###   ########.fr       */
+/*   Updated: 2025/05/12 11:24:36 by rpepi            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -38,29 +38,38 @@ int Socket::get_fd() const {
 
 // Configure le socket en mode non-bloquant
 void Socket::set_non_blocking() {
-    int flags = 1; // 1 pour activer le mode non-bloquant
-    if (ioctl(fd_, FIONBIO, &flags) == -1) {
-        throw std::runtime_error("Failed to set socket non-blocking using ioctl");
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+    FD_SET(fd_, &read_fds);
+    
+    // Configure un timeout de 0 pour le mode non-bloquant
+    struct timeval timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 0;
+    
+    // Utilise select pour configurer le mode non-bloquant
+    if (select(fd_ + 1, &read_fds, NULL, NULL, &timeout) < 0) {
+        throw std::runtime_error("Failed to set socket non-blocking");
     }
 }
 
 // Crée un socket
 void Socket::create_socket() {
-    // Crée un socket IPv4 (AF_INET) en mode TCP (SOCK_STREAM)
     fd_ = socket(AF_INET, SOCK_STREAM, 0);
     if (fd_ < 0) {
-        throw std::runtime_error("Failed to create socket"); // Erreur si la création échoue
+        throw std::runtime_error("Failed to create socket");
     }
     
-    // Configure poll
-    poll_fd_.fd = fd_;
-    poll_fd_.events = POLLIN | POLLOUT;
-    poll_fd_.revents = 0;
+    // Ajoute le socket principal au poll
+    struct pollfd pfd;
+    pfd.fd = fd_;
+    pfd.events = POLLIN;  // Écoute uniquement les connexions entrantes
+    pfd.revents = 0;
+    poll_fds_.push_back(pfd);
     
-    // Configure l'option SO_REUSEADDR pour permettre la réutilisation de l'adresse
     int opt = 1;
     if (setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        throw std::runtime_error("setsockopt failed"); // Erreur si la configuration échoue
+        throw std::runtime_error("setsockopt failed");
     }
 }
 
@@ -85,14 +94,44 @@ void Socket::listen_socket() {
     }
 }
 
-int Socket::wait_for_event(int timeout_ms) {
-    return poll(&poll_fd_, 1, timeout_ms);
+void Socket::add_to_poll(int fd) {
+    struct pollfd pfd;
+    pfd.fd = fd;
+    pfd.events = POLLIN | POLLOUT;  // Surveille lecture et écriture
+    pfd.revents = 0;
+    poll_fds_.push_back(pfd);
 }
 
-bool Socket::can_read() const {
-    return (poll_fd_.revents & POLLIN);
+void Socket::remove_from_poll(int fd) {
+    for (std::vector<struct pollfd>::iterator it = poll_fds_.begin(); 
+         it != poll_fds_.end(); ++it) {
+        if (it->fd == fd) {
+            poll_fds_.erase(it);
+            break;
+        }
+    }
 }
 
-bool Socket::can_write() const {
-    return (poll_fd_.revents & POLLOUT);
+int Socket::wait_for_events(int timeout_ms) {
+    return poll(&poll_fds_[0], poll_fds_.size(), timeout_ms);
+}
+
+bool Socket::can_read(int fd) const {
+    for (std::vector<struct pollfd>::const_iterator it = poll_fds_.begin();
+         it != poll_fds_.end(); ++it) {
+        if (it->fd == fd) {
+            return (it->revents & POLLIN);
+        }
+    }
+    return false;
+}
+
+bool Socket::can_write(int fd) const {
+    for (std::vector<struct pollfd>::const_iterator it = poll_fds_.begin();
+         it != poll_fds_.end(); ++it) {
+        if (it->fd == fd) {
+            return (it->revents & POLLOUT);
+        }
+    }
+    return false;
 }

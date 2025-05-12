@@ -1,6 +1,7 @@
 #include "../includes/HTTPRequest.hpp"
 #include "../includes/Socket.hpp"
 #include "../includes/Config.hpp"
+#include "../includes/MIME.hpp"
 
 // Parses raw HTTP request string into structured data
 HTTPRequest::HTTPRequest(const std::string& raw_request) {
@@ -103,7 +104,8 @@ void handle_get_request(const std::string& path, int client_fd, const std::strin
     try {
         std::string file_path = base_path + (path == "/" ? "/index.html" : path);
         std::string content = read_file(file_path);
-        std::string response = create_http_response(content);
+        std::string mime_type = MIME::get_type(file_path);
+        std::string response = create_http_response(content, mime_type);
         send(client_fd, response.c_str(), response.length(), 0);
     } 
     catch (const std::exception&) {

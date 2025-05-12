@@ -9,7 +9,7 @@
 #include <iostream>
 #include <cstdlib>
 
-// Structure pour les configurations de route
+
 struct Location {
     std::string root;                    // Chemin racine pour les fichiers
     std::vector<std::string> methods;    // Méthodes HTTP autorisées
@@ -18,7 +18,7 @@ struct Location {
     std::string cgi_extension;           // Extension pour les fichiers CGI
 };
 
-// Structure pour la configuration d'un serveur
+
 struct ServerConfig {
     std::string host;                    // Adresse d'écoute
     int port;                            // Port d'écoute

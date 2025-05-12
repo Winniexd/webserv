@@ -22,7 +22,7 @@ int main() {
         Socket server(server_config.port, server_config.host);
         
         char cwd[1024];
-        if (getcwd(cwd, sizeof(cwd)) == NULL) {
+        if (getcwd(cwd, sizeof(cwd)) == NULL) { //La fonction getcwd() copie le chemin d'accès absolu du répertoire de travail courant dans la chaîne pointée par buf, qui est de longueur size. 
             throw std::runtime_error("Cannot get current working directory");
         }
 
@@ -35,71 +35,90 @@ int main() {
         std::cout << "Server running at http://" << server_config.host 
                   << ":" << server_config.port << std::endl;
 
+        std::vector<int> client_fds;
+
         while (true) {
-            if (server.wait_for_event(1000) > 0 && server.can_read()) {
-                struct sockaddr_in client_addr;
-                socklen_t client_len = sizeof(client_addr);
+            if (server.wait_for_events(1000) > 0) {
+                // Vérifier les nouvelles connexions sur le socket principal
+                if (server.can_read(server.get_fd())) {
+                    int client_fd = accept(server.get_fd(), NULL, NULL);
+                    if (client_fd > 0) {
+                        server.add_to_poll(client_fd);
+                        client_fds.push_back(client_fd);
+                    }
+                }
                 
-                int client_fd = accept(server.get_fd(), 
-                                     (struct sockaddr*)&client_addr, 
-                                     &client_len);
-                
-                if (client_fd > 0) {
-                    char buffer[4096] = {0};
-                    recv(client_fd, buffer, sizeof(buffer), 0);
+                // Vérifier les clients existants
+                for (std::vector<int>::iterator it = client_fds.begin(); 
+                     it != client_fds.end();) {
+                    int fd = *it;
                     
-                    try {
-                        HTTPRequest request(buffer);
-                        std::string method = request.get_method();
-                        std::string path = request.get_path();
-                        
-                        // Add debug output
-                        std::cout << "Received " << method << " request for " << path << std::endl;
-                        
-                        // Check if method is allowed for this location
-                        std::string location = "/";
-                        const Location& loc = server_config.locations.at(location);
-                        
-                        // Debug output for allowed methods
-                        std::cout << "Allowed methods: ";
-                        std::vector<std::string>::const_iterator debug_it;
-                        for (debug_it = loc.methods.begin(); debug_it != loc.methods.end(); ++debug_it) {
-                            std::cout << *debug_it << " ";
+                    if (server.can_read(fd)) {
+                        char buffer[4096] = {0};
+                        ssize_t bytes = recv(fd, buffer, sizeof(buffer), 0);
+                        if (bytes <= 0) {
+                            server.remove_from_poll(fd);
+                            close(fd);
+                            it = client_fds.erase(it);
+                            continue;
                         }
-                        std::cout << std::endl;
-                        
-                        bool method_allowed = false;
-                        std::vector<std::string>::const_iterator it;
-                        for (it = loc.methods.begin(); it != loc.methods.end(); ++it) {
-                            if (*it == method) {
-                                method_allowed = true;
-                                break;
+                        try {
+                            HTTPRequest request(buffer);
+                            std::string method = request.get_method();
+                            std::string path = request.get_path();
+                            
+                            // Add debug output
+                            std::cout << "Received " << method << " request for " << path << std::endl;
+                            
+                            // Check if method is allowed for this location
+                            std::string location = "/";
+                            const Location& loc = server_config.locations.at(location);
+                            
+                            // Debug output for allowed methods
+                            std::cout << "Allowed methods: ";
+                            std::vector<std::string>::const_iterator debug_it;
+                            for (debug_it = loc.methods.begin(); debug_it != loc.methods.end(); ++debug_it) {
+                                std::cout << *debug_it << " ";
+                            }
+                            std::cout << std::endl;
+                            
+                            bool method_allowed = false;
+                            std::vector<std::string>::const_iterator it;
+                            for (it = loc.methods.begin(); it != loc.methods.end(); ++it) {
+                                if (*it == method) {
+                                    method_allowed = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (!method_allowed) {
+                                std::string error = create_error_response(405, "Method Not Allowed");
+                                send(fd, error.c_str(), error.length(), 0);
+                            }
+                            else if (method == "GET") {
+                                handle_get_request(path, fd, base_path);
+                            }
+                            else if (method == "POST") {
+                                handle_post_request(request, fd, base_path);
+                            }
+                            else if (method == "DELETE") {
+                                handle_delete_request(path, fd, base_path);
+                            }
+                            else {
+                                std::string error = create_error_response(501, "Not Implemented");
+                                send(fd, error.c_str(), error.length(), 0);
                             }
                         }
-                        
-                        if (!method_allowed) {
-                            std::string error = create_error_response(405, "Method Not Allowed");
-                            send(client_fd, error.c_str(), error.length(), 0);
-                        }
-                        else if (method == "GET") {
-                            handle_get_request(path, client_fd, base_path);
-                        }
-                        else if (method == "POST") {
-                            handle_post_request(request, client_fd, base_path);
-                        }
-                        else if (method == "DELETE") {
-                            handle_delete_request(path, client_fd, base_path);
-                        }
-                        else {
-                            std::string error = create_error_response(501, "Not Implemented");
-                            send(client_fd, error.c_str(), error.length(), 0);
+                        catch (const std::exception& e) {
+                            std::string error = create_error_response(500, "Internal Server Error");
+                            send(fd, error.c_str(), error.length(), 0);
                         }
                     }
-                    catch (const std::exception& e) {
-                        std::string error = create_error_response(500, "Internal Server Error");
-                        send(client_fd, error.c_str(), error.length(), 0);
+                    
+                    if (server.can_write(fd)) {
+                        // Envoyer la réponse si nécessaire...
                     }
-                    close(client_fd);
+                    ++it;
                 }
             }
         }

@@ -20,18 +20,12 @@
 #include <sys/types.h>
 #include <cstring>
 #include <sys/wait.h>
+#include <cstdlib>
 #include <unistd.h>
 
-#define PATH_MAX 4096
+#include "HTTPRequest.hpp"
 
-class Request {
-    private:
-        std::string path;
-    public:
-        Request();
-        ~Request();
-        std::string const get_path() const;
-};
+#define PATH_MAX 4096
 
 class Cgi {
     private:
@@ -52,7 +46,7 @@ class Cgi {
         void add(const std::string &key, const std::string &value);
         void convert();
 
-        void init_env(Request &request);
+        void init_env(const HTTPRequest &request);
         int exec();
 };
 

@@ -12,18 +12,6 @@
 
 #include "../includes/cgi.hpp"
 
-Request::Request() {
-    this->path = "/cgi-bin/test.sh";
-}
-
-Request::~Request() {
-
-}
-
-std::string const Request::get_path() const {
-    return this->path;
-}
-
 Cgi::Cgi() {
     char buffer[PATH_MAX];
     getcwd(buffer, PATH_MAX);
@@ -45,7 +33,7 @@ Cgi::~Cgi() {
 }
 
 void Cgi::add(const std::string &key, const std::string &value) {
-    env.emplace_back(key + "=" + value);
+    env.push_back(key + "=" + value);
 }
 
 void Cgi::convert() {
@@ -57,10 +45,10 @@ void Cgi::convert() {
     for (std::size_t i = 0; i < env.size(); i++) {
         this->envp[i] = strdup(this->env[i].c_str());
     }
-    this->envp[env.size()] = nullptr;
+    this->envp[env.size()] = NULL;
 }
 
-void Cgi::init_env(Request &request) {
+void Cgi::init_env(const HTTPRequest &request) {
     std::string request_path = request.get_path();
     std::string cgi_dir = "/cgi-bin/";
 
@@ -70,7 +58,7 @@ void Cgi::init_env(Request &request) {
     }
     
     if (request_path[0] != '/') //Checks if path is relative, if so make the path absolute
-        exec_path = cgi_path + request.get_path();
+        exec_path = cgi_path + request_path;
     else { //else exec_path is equal to the absolute path
         size_t pos = request_path.find(cgi_dir);
         if (pos == std::string::npos) { //check if the absolute path contains the cgi-bin directory
@@ -87,14 +75,31 @@ void Cgi::init_env(Request &request) {
         std::cerr << "Path traversal is not allowed" << std::endl;
         return ;
     }
-    add("GATEWAY", "CGI/1.1");
+    std::string host = request.get_header("host");
+    size_t pos = host.find(":");
+    std::string host_name = host;
+    std::string host_port = "80";
+    if (pos != std::string::npos) {
+        host_name = host.substr(0, pos);
+        host_port = host.substr(pos + 1);
+    }
+    add("AUTH_TYPE", request.get_header("auth-scheme"));
+    add("CONTENT_LENGTH", request.get_header("content-length"));
+    add("CONTENT_TYPE", request.get_header("content-type"));
+    add("GATEWAY_INTERFACE", "CGI/1.1");
     add("PATH_INFO", request_path);
-    add("SCRIPT_NAME", request_path.substr(cgi_dir.length()));
     add("PATH_TRANSLATED", exec_path);
+    add("QUERY_STRING", ""); //Need a get_query_string() function
+    add("REMOTE_ADDR", ""); //Don't think we need this one since our client will have the same address as our host in our case
+    add("REQUEST_METHOD", request.get_method());
+    add("SCRIPT_NAME", request_path.substr(cgi_dir.length()));
+    add("SERVER_NAME", host_name);
+    add("SERVER_PORT", host_port);
+    add("SERVER_PROTOCOL", request.get_version());
 
     convert(); //Convert env to char array for execve
     argv[0] = strdup(exec_path.c_str());
-    argv[1] = nullptr;
+    argv[1] = NULL;
 
     for (std::size_t i = 0; envp[i]; i++)
         std::cout << envp[i] << std::endl;
@@ -135,19 +140,4 @@ int Cgi::exec() {
     int status;
     waitpid(pid, &status, 0);
     return WIFEXITED(status) ? WEXITSTATUS(status): 1;
-}
-
-
-int main() {
-    Cgi cgi;
-    Request request;
-    cgi.init_env(request);
-    cgi.exec();
-    char buffer[1024];
-    int ret = 0;
-    while ((ret = read(cgi.out_fd[0], buffer, sizeof(buffer) - 1)) > 0) {
-        buffer[ret] = '\0';
-        std::cout << buffer;
-    }
-    close(cgi.out_fd[0]);
 }

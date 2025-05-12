@@ -98,16 +98,16 @@ void Cgi::init_env(Request &request) {
 
     for (std::size_t i = 0; envp[i]; i++)
         std::cout << envp[i] << std::endl;
+    std::cout << std::endl;
 }
 
 int Cgi::exec() {
-
     if (pipe(in_fd) || pipe(out_fd)) { //Check if pipe command fails
         std::cerr << "Pipe failed!" << std::endl;
         return 1;
     }
-    std::cout << argv[0] << std::endl;
-    std::cout << argv[1] << std::endl;
+    //std::cout << argv[0] << std::endl;
+    //std::cout << argv[1] << std::endl;
 
     pid_t pid = fork();
     if (pid < 0) {
@@ -122,8 +122,9 @@ int Cgi::exec() {
         close(in_fd[1]);
         close(out_fd[0]);
         close(out_fd[1]);
-        execve(argv[0], argv, envp); //Failing don't know why yet
-
+        char* const* null = NULL;
+        execve(argv[0], null, envp); //Failing don't know why yet
+        std::cout << "Execve Failed" << std::endl;
         exit(1);
     }
     else {
@@ -148,6 +149,5 @@ int main() {
         buffer[ret] = '\0';
         std::cout << buffer;
     }
-    std::cout << ret << std::endl;
-    close(cgi.out_fd[0]); 
+    close(cgi.out_fd[0]);
 }

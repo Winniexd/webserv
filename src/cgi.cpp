@@ -122,27 +122,35 @@ int Cgi::exec() {
     }
 
     if (pid == 0) {
-        dup2(in_fd[0], STDIN_FILENO);
-        dup2(out_fd[1], STDOUT_FILENO);
+        // Vérifier les valeurs de retour de dup2
+        if (dup2(in_fd[0], STDIN_FILENO) == -1) {
+            exit(1);
+        }
+        if (dup2(out_fd[1], STDOUT_FILENO) == -1) {
+            exit(1);
+        }
+        
         close(in_fd[0]);
         close(in_fd[1]);
         close(out_fd[0]);
         close(out_fd[1]);
         
-        argv[0] = strdup("/opt/homebrew/bin/php");
+        argv[0] = strdup("/usr/bin/php");
         argv[1] = strdup(exec_path.c_str());
         argv[2] = NULL;
         
-        if (execve(argv[0], argv, envp) == -1) {
-            std::cerr << "Execve failed: " << strerror(errno) << std::endl;
-            exit(1);
-        }
+        execve(argv[0], argv, envp);
+        // Si execve retourne, c'est qu'il y a eu une erreur
+        exit(1);
     }
     
     close(in_fd[0]);
     close(out_fd[1]);
 
     int status;
-    waitpid(pid, &status, 0);
+    // Vérifier la valeur de retour de waitpid
+    if (waitpid(pid, &status, 0) == -1) {
+        return 1;
+    }
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }

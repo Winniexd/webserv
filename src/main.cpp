@@ -30,12 +30,16 @@ bool is_cgi_request(const std::string& path, const Location& loc) {
 }
 
 std::string handle_cgi_request(const HTTPRequest& request, const std::string& base_path) {
+    (void)base_path; // Pour éviter l'avertissement de paramètre non utilisé
+    
     Cgi cgi;
     cgi.init_env(request);
     int status = cgi.exec();
     
     if (status != 0) {
-        throw std::runtime_error("CGI execution failed with status: " + std::to_string(status));
+        std::stringstream ss;
+        ss << "CGI execution failed with status: " << status;
+        throw std::runtime_error(ss.str());
     }
     
     // Lire la sortie du CGI

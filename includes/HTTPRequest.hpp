@@ -7,6 +7,7 @@
 
 class HTTPRequest {
 public:
+    HTTPRequest();  // Constructeur par défaut
     HTTPRequest(const std::string& raw_request);
     
     std::string get_method() const;
@@ -14,6 +15,7 @@ public:
     std::string get_version() const;
     std::string get_header(const std::string& key) const;
     std::string get_body() const;
+    std::map<std::string, std::string> get_headers() const;
 
 private:
     std::string method_;

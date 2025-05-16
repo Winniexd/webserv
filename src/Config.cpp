@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Config.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: rpepi <rpepi@student.42.fr>                +#+  +:+       +#+        */
+/*   By: pepi <pepi@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/26 14:03:44 by pepi              #+#    #+#             */
-/*   Updated: 2025/05/09 14:07:43 by rpepi            ###   ########.fr       */
+/*   Updated: 2025/05/16 11:37:43 by pepi             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -114,7 +114,12 @@ void Config::parse_file(const std::string& file_path) {
                 iss >> upload;
                 loc.upload = (upload == "on");
             } else if (key == "cgi") {
-                iss >> loc.cgi_extension;
+                std::string cgi;
+                iss >> cgi;
+                if (!cgi.empty() && cgi[cgi.size() - 1] == ';') {
+                    cgi.erase(cgi.size() - 1);
+                }
+                loc.cgi = cgi;
             }
         }
     }

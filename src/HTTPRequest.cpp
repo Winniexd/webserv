@@ -2,8 +2,14 @@
 #include "../includes/Socket.hpp"
 #include "../includes/Config.hpp"
 #include "../includes/MIME.hpp"
+#include <sstream>
+#include <algorithm>
 
 // Parses raw HTTP request string into structured data
+HTTPRequest::HTTPRequest() : method_(""), path_(""), body_("") {
+    // Initialisation par défaut
+}
+
 HTTPRequest::HTTPRequest(const std::string& raw_request) {
     parse_request(raw_request);
 }

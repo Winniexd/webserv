@@ -1,13 +1,55 @@
 #include "../includes/Socket.hpp"
 #include "../includes/Config.hpp"
 #include "../includes/HTTPRequest.hpp"
+#include "../includes/cgi.hpp"
 #include <iostream>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <map>
 
+// Map pour stocker les requêtes en cours de traitement
+std::map<int, HTTPRequest> pending_requests;
+
+bool is_cgi_request(const std::string& path, const Location& loc) {
+    if (loc.cgi.empty()) return false;
+    
+    // Vérifier si le chemin commence par /cgi-bin/
+    if (path.find("/cgi-bin/") != 0) return false;
+    
+    size_t dot_pos = path.find_last_of('.');
+    if (dot_pos == std::string::npos) return false;
+    
+    std::string extension = path.substr(dot_pos);
+    std::cout << "Checking CGI: path=" << path << ", extension=" << extension << ", cgi=" << loc.cgi << std::endl;
+    
+    // Vérifier si l'extension correspond à celle configurée
+    return extension == loc.cgi;
+}
+
+std::string handle_cgi_request(const HTTPRequest& request, const std::string& base_path) {
+    Cgi cgi;
+    cgi.init_env(request);
+    int status = cgi.exec();
+    
+    if (status != 0) {
+        throw std::runtime_error("CGI execution failed with status: " + std::to_string(status));
+    }
+    
+    // Lire la sortie du CGI
+    char buffer[4096];
+    std::string output;
+    ssize_t bytes;
+    
+    while ((bytes = read(cgi.get_out_fd(), buffer, sizeof(buffer) - 1)) > 0) {
+        buffer[bytes] = '\0';
+        output += buffer;
+    }
+    
+    return output;
+}
 
 int main() {
     try {
@@ -38,54 +80,50 @@ int main() {
         std::vector<int> client_fds;
 
         while (true) {
-            if (server.wait_for_events(1000) > 0) {
-                // Vérifier les nouvelles connexions sur le socket principal
-                if (server.can_read(server.get_fd())) {
-                    int client_fd = accept(server.get_fd(), NULL, NULL);
-                    if (client_fd > 0) {
-                        server.add_to_poll(client_fd);
-                        client_fds.push_back(client_fd);
-                    }
-                }
+            // Attendre les événements avec un timeout de 1000ms
+            int ret = server.wait_for_events(1000);
+            if (ret < 0) {
+                throw std::runtime_error("Poll error");
+            }
+
+            // Gérer les nouvelles connexions
+            int client_fd = server.accept_connection();
+            if (client_fd > 0) {
+                server.add_to_poll(client_fd);
+                client_fds.push_back(client_fd);
+                std::cout << "New client connected: " << client_fd << std::endl;
+            }
+            
+            // Gérer les clients existants
+            for (std::vector<int>::iterator it = client_fds.begin(); 
+                 it != client_fds.end();) {
+                int fd = *it;
+                bool should_remove = false;
                 
-                // Vérifier les clients existants
-                for (std::vector<int>::iterator it = client_fds.begin(); 
-                     it != client_fds.end();) {
-                    int fd = *it;
+                // Lecture des données
+                if (server.can_read(fd)) {
+                    char buffer[4096] = {0};
+                    ssize_t bytes = recv(fd, buffer, sizeof(buffer) - 1, 0);
                     
-                    if (server.can_read(fd)) {
-                        char buffer[4096] = {0};
-                        ssize_t bytes = recv(fd, buffer, sizeof(buffer), 0);
-                        if (bytes <= 0) {
-                            server.remove_from_poll(fd);
-                            close(fd);
-                            it = client_fds.erase(it);
-                            continue;
-                        }
+                    if (bytes <= 0) {
+                        should_remove = true;
+                    } else {
                         try {
+                            // Traiter la requête
                             HTTPRequest request(buffer);
                             std::string method = request.get_method();
                             std::string path = request.get_path();
                             
-                            // Add debug output
                             std::cout << "Received " << method << " request for " << path << std::endl;
                             
-                            // Check if method is allowed for this location
+                            // Vérifier la méthode autorisée
                             std::string location = "/";
                             const Location& loc = server_config.locations.at(location);
                             
-                            // Debug output for allowed methods
-                            std::cout << "Allowed methods: ";
-                            std::vector<std::string>::const_iterator debug_it;
-                            for (debug_it = loc.methods.begin(); debug_it != loc.methods.end(); ++debug_it) {
-                                std::cout << *debug_it << " ";
-                            }
-                            std::cout << std::endl;
-                            
                             bool method_allowed = false;
-                            std::vector<std::string>::const_iterator it;
-                            for (it = loc.methods.begin(); it != loc.methods.end(); ++it) {
-                                if (*it == method) {
+                            for (std::vector<std::string>::const_iterator mit = loc.methods.begin(); 
+                                 mit != loc.methods.end(); ++mit) {
+                                if (*mit == method) {
                                     method_allowed = true;
                                     break;
                                 }
@@ -94,30 +132,67 @@ int main() {
                             if (!method_allowed) {
                                 std::string error = create_error_response(405, "Method Not Allowed");
                                 send(fd, error.c_str(), error.length(), 0);
+                            } else {
+                                // Stocker la requête pour traitement asynchrone
+                                pending_requests[fd] = request;
                             }
-                            else if (method == "GET") {
-                                handle_get_request(path, fd, base_path);
-                            }
-                            else if (method == "POST") {
-                                handle_post_request(request, fd, base_path);
-                            }
-                            else if (method == "DELETE") {
-                                handle_delete_request(path, fd, base_path);
-                            }
-                            else {
-                                std::string error = create_error_response(501, "Not Implemented");
-                                send(fd, error.c_str(), error.length(), 0);
-                            }
-                        }
-                        catch (const std::exception& e) {
+                        } catch (const std::exception& e) {
                             std::string error = create_error_response(500, "Internal Server Error");
                             send(fd, error.c_str(), error.length(), 0);
+                            should_remove = true;
                         }
                     }
+                }
+                
+                // Écriture des réponses
+                if (server.can_write(fd) && pending_requests.find(fd) != pending_requests.end()) {
+                    HTTPRequest& request = pending_requests[fd];
+                    std::string method = request.get_method();
+                    std::string path = request.get_path();
                     
-                    if (server.can_write(fd)) {
-                        // Envoyer la réponse si nécessaire...
+                    try {
+                        // Trouver la location correspondante
+                        std::string location = "/";
+                        for (std::map<std::string, Location>::const_iterator it = server_config.locations.begin();
+                             it != server_config.locations.end(); ++it) {
+                            if (path.find(it->first) == 0) {
+                                location = it->first;
+                                break;
+                            }
+                        }
+                        
+                        const Location& loc = server_config.locations.at(location);
+                        
+                        // Vérifier si c'est une requête CGI
+                        if (is_cgi_request(path, loc)) {
+                            std::string response = handle_cgi_request(request, base_path);
+                            send(fd, response.c_str(), response.length(), 0);
+                        } else {
+                            if (method == "GET") {
+                                handle_get_request(path, fd, base_path);
+                            } else if (method == "POST") {
+                                handle_post_request(request, fd, base_path);
+                            } else if (method == "DELETE") {
+                                handle_delete_request(path, fd, base_path);
+                            }
+                        }
+                        
+                        // Nettoyer la requête traitée
+                        pending_requests.erase(fd);
+                    } catch (const std::exception& e) {
+                        std::string error = create_error_response(500, "Internal Server Error");
+                        send(fd, error.c_str(), error.length(), 0);
+                        should_remove = true;
                     }
+                }
+                
+                // Gérer la déconnexion
+                if (should_remove) {
+                    server.remove_from_poll(fd);
+                    close(fd);
+                    pending_requests.erase(fd);
+                    it = client_fds.erase(it);
+                } else {
                     ++it;
                 }
             }

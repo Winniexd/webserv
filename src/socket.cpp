@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   socket.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: rpepi <rpepi@student.42.fr>                +#+  +:+       +#+        */
+/*   By: pepi <pepi@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/26 17:15:42 by pepi              #+#    #+#             */
-/*   Updated: 2025/05/12 11:24:36 by rpepi            ###   ########.fr       */
+/*   Updated: 2025/05/16 11:19:18 by pepi             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -38,17 +38,15 @@ int Socket::get_fd() const {
 
 // Configure le socket en mode non-bloquant
 void Socket::set_non_blocking() {
-    fd_set read_fds;
-    FD_ZERO(&read_fds);
-    FD_SET(fd_, &read_fds);
+    // Ajoute le socket au poll avec POLLIN pour la lecture
+    struct pollfd pfd;
+    pfd.fd = fd_;
+    pfd.events = POLLIN;
+    pfd.revents = 0;
     
-    // Configure un timeout de 0 pour le mode non-bloquant
-    struct timeval timeout;
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 0;
-    
-    // Utilise select pour configurer le mode non-bloquant
-    if (select(fd_ + 1, &read_fds, NULL, NULL, &timeout) < 0) {
+    // Vérifie si le socket est prêt pour la lecture
+    int ret = poll(&pfd, 1, 0);
+    if (ret < 0) {
         throw std::runtime_error("Failed to set socket non-blocking");
     }
 }
@@ -134,4 +132,30 @@ bool Socket::can_write(int fd) const {
         }
     }
     return false;
+}
+
+// Ajoute une nouvelle méthode pour gérer les connexions entrantes
+int Socket::accept_connection() {
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    
+    // Utilise poll pour vérifier si une nouvelle connexion est disponible
+    struct pollfd pfd;
+    pfd.fd = fd_;
+    pfd.events = POLLIN;
+    pfd.revents = 0;
+    
+    int ret = poll(&pfd, 1, 0);
+    if (ret < 0) {
+        throw std::runtime_error("Poll failed in accept_connection");
+    }
+    
+    if (ret > 0 && (pfd.revents & POLLIN)) {
+        int client_fd = accept(fd_, (struct sockaddr*)&client_addr, &client_len);
+        if (client_fd < 0) {
+            throw std::runtime_error("Failed to accept connection");
+        }
+        return client_fd;
+    }
+    return -1;
 }

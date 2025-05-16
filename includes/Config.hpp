@@ -16,6 +16,9 @@ struct Location {
     std::string index;                   // Fichier index par défaut
     bool upload;                         // Autorise les uploads si true
     std::string cgi_extension;           // Extension pour les fichiers CGI
+    bool autoindex;
+    std::string cgi;
+    std::string redirect;
 };
 
 

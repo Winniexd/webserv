@@ -33,6 +33,7 @@ public:
     int wait_for_events(int timeout_ms);   // Surveille tous les FDs
     bool can_read(int fd) const;           // Vérifie si on peut lire
     bool can_write(int fd) const;          // Vérifie si on peut écrire
+    int accept_connection();  // Nouvelle méthode
 
 private:
     int fd_;          // Descripteur de fichier du socket

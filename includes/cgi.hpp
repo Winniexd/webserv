@@ -48,6 +48,7 @@ class Cgi {
 
         void init_env(const HTTPRequest &request);
         int exec();
+        int get_out_fd() const;
 };
 
 #endif

@@ -1,1 +1,74 @@
-<html><body><h1>Welcome to Webserv!</h1></body></html>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Projet webserv - rpepi & mdreesen</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>Projet <span>webserv</span></h1>
+        <p>par <b>rpepi</b> &amp; <b>mdreesen</b></p>
+    </header>
+    <div class="container">
+<body>
+    <h1>Testeur HTTP Webserv</h1>
+    <div class="container">
+        <div class="block">
+            <h2>GET</h2>
+            <input type="text" id="get-path" placeholder="/uploads/newfile.txt" value="/uploads/newfile.txt">
+            <button onclick="doGet()">Envoyer GET</button>
+            <pre id="get-result"></pre>
+        </div>
+        <div class="block">
+            <h2>POST (Upload)</h2>
+            <input type="file" id="upload-file">
+            <button onclick="doUpload()">Uploader</button>
+            <pre id="upload-result"></pre>
+        </div>
+        <div class="block">
+            <h2>DELETE</h2>
+            <input type="text" id="delete-path" placeholder="/uploads/newfile.txt" value="/uploads/newfile.txt">
+            <button onclick="doDelete()">Envoyer DELETE</button>
+            <pre id="delete-result"></pre>
+        </div>
+    </div>
+    <script>
+        function doGet() {
+            const path = document.getElementById('get-path').value;
+            fetch(path)
+                .then(r => r.text().then(t => {
+                    document.getElementById('get-result').textContent = t;
+                }))
+                .catch(e => document.getElementById('get-result').textContent = e);
+        }
+
+        function doUpload() {
+            const fileInput = document.getElementById('upload-file');
+            if (!fileInput.files.length) {
+                document.getElementById('upload-result').textContent = "Aucun fichier sélectionné.";
+                return;
+            }
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.text().then(t => {
+                document.getElementById('upload-result').textContent = t;
+            }))
+            .catch(e => document.getElementById('upload-result').textContent = e);
+        }
+
+        function doDelete() {
+            const path = document.getElementById('delete-path').value;
+            fetch(path, { method: 'DELETE' })
+                .then(r => r.text().then(t => {
+                    document.getElementById('delete-result').textContent = t;
+                }))
+                .catch(e => document.getElementById('delete-result').textContent = e);
+        }
+    </script>
+</body>
+</html>

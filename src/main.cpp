@@ -14,7 +14,7 @@
 std::map<int, HTTPRequest> pending_requests;
 
 bool is_cgi_request(const std::string& path, const Location& loc) {
-    if (loc.cgi.empty()) return false;
+    if (loc.cgi.empty()) return false; //loc.cgi is always empty
     
     // Vérifier si le chemin commence par /cgi-bin/
     if (path.find("/cgi-bin/") != 0) return false;
@@ -159,17 +159,20 @@ int main() {
                         std::string location = "/";
                         for (std::map<std::string, Location>::const_iterator it = server_config.locations.begin();
                              it != server_config.locations.end(); ++it) {
-                            if (path.find(it->first) == 0) {
+                            if (path.find(it->first) == 0 && it != server_config.locations.begin()) {
                                 location = it->first;
                                 break;
                             }
                         }
+                        std::cout << location << std::endl;
                         
                         const Location& loc = server_config.locations.at(location);
-                        
+                        std::cout << loc.cgi << std::endl;
                         // Vérifier si c'est une requête CGI
-                        if (is_cgi_request(path, loc)) {
-                            std::string response = handle_cgi_request(request, base_path);
+                        if (location == "/cgi-bin") { //placeholder until is_cgi_request is fixed
+                            std::string output = handle_cgi_request(request, base_path);
+                            std::string response = create_http_response(output, "text/html");
+                            std::cout << response << std::endl;
                             send(fd, response.c_str(), response.length(), 0);
                         } else {
                             if (method == "GET") {

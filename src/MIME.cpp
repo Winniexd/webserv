@@ -1,5 +1,4 @@
 #include "../includes/MIME.hpp"
-
 // Initialize static members
 std::map<std::string, std::string> MIME::mime_types_;
 bool MIME::initialized_ = false;

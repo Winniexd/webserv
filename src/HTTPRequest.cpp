@@ -2,6 +2,8 @@
 #include "../includes/Socket.hpp"
 #include "../includes/Config.hpp"
 #include "../includes/MIME.hpp"
+#include <sys/stat.h> // pour mkdir
+#include <dirent.h> // pour parcourir les dossiers
 
 // Parses raw HTTP request string into structured data
 HTTPRequest::HTTPRequest(const std::string& raw_request) {
@@ -102,7 +104,18 @@ std::string create_error_response(int status_code, const std::string& message) {
 // - Returns 404 if file not found
 void handle_get_request(const std::string& path, int client_fd, const std::string& base_path) {
     try {
-        std::string file_path = base_path + (path == "/" ? "/index.html" : path);
+        std::string filename = (path == "/" ? "index.html" : path.substr(path.find_last_of('/') + 1));
+        std::string file_path;
+
+        // Si on est dans le dossier d'upload, cherche dans les sous-dossiers MIME
+        if (path.find("/upload") == 0 || path.find("/uploads") == 0) {
+            file_path = find_uploaded_file(filename, base_path);
+            if (file_path.empty())
+                throw std::runtime_error("Not found");
+        } else {
+            file_path = base_path + (path == "/" ? "/index.html" : path);
+        }
+
         std::string content = read_file(file_path);
         std::string mime_type = MIME::get_type(file_path);
         std::string response = create_http_response(content, mime_type);
@@ -114,18 +127,68 @@ void handle_get_request(const std::string& path, int client_fd, const std::strin
     }
 }
 
+// Remplace les '/' par '_' pour les noms de dossiers valides (C++98)
+static std::string safe_mime_dir(const std::string& mime) {
+    std::string dir = mime;
+    for (std::string::size_type i = 0; i < dir.size(); ++i)
+        if (dir[i] == '/')
+            dir[i] = '_';
+    return dir;
+}
+
+// Cherche le fichier dans tous les sous-dossiers MIME de base_path
+std::string find_uploaded_file(const std::string& filename, const std::string& base_path) {
+    DIR* dir = opendir(base_path.c_str());
+    if (!dir) return "";
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        // Ignore . et ..
+        if (entry->d_type == DT_DIR && std::string(entry->d_name) != "." && std::string(entry->d_name) != "..") {
+            std::string subdir = base_path + "/" + entry->d_name;
+            std::string candidate = subdir + "/" + filename;
+            std::ifstream file(candidate.c_str(), std::ios::binary);
+            if (file.is_open()) {
+                closedir(dir);
+                return candidate;
+            }
+        }
+    }
+    closedir(dir);
+    return ""; // Not found
+}
+
 // Handles POST requests:
 // - Creates or overwrites file at specified path
 // - Uses request body as file content
 // - Returns 500 if file creation fails
 void handle_post_request(const HTTPRequest& request, int client_fd, const std::string& base_path) {
     try {
-        std::string upload_path = base_path + request.get_path();
-        std::ofstream file(upload_path.c_str());
-        if (!file) {
+        // Récupère le nom du fichier à partir du path
+        std::string path = request.get_path();
+        std::string::size_type slash = path.find_last_of('/');
+        std::string filename = (slash != std::string::npos) ? path.substr(slash + 1) : path;
+
+        // Détermine le type MIME
+        std::string mime = MIME::get_type(filename);
+
+        // Crée un sous-dossier pour chaque type MIME (ex: image_jpeg)
+        std::string subdir = safe_mime_dir(mime);
+        std::string upload_dir = base_path + "/" + subdir;
+
+        // Crée le dossier s'il n'existe pas
+        mkdir(upload_dir.c_str(), 0777);
+
+        // Chemin complet du fichier à écrire
+        std::string upload_path = upload_dir + "/" + filename;
+
+        // Écrit le fichier uploadé
+        std::ofstream file(upload_path.c_str(), std::ios::binary);
+        if (!file)
             throw std::runtime_error("Cannot create file");
-        }
         file << request.get_body();
+        file.close();
+
         std::string response = create_http_response("File uploaded successfully", "text/plain");
         send(client_fd, response.c_str(), response.length(), 0);
     }
@@ -141,8 +204,9 @@ void handle_post_request(const HTTPRequest& request, int client_fd, const std::s
 // - Returns 404 if file doesn't exist or can't be deleted
 void handle_delete_request(const std::string& path, int client_fd, const std::string& base_path) {
     try {
-        std::string file_path = base_path + path;
-        if (remove(file_path.c_str()) != 0) {
+        std::string filename = path.substr(path.find_last_of('/') + 1);
+        std::string file_path = find_uploaded_file(filename, base_path);
+        if (file_path.empty() || remove(file_path.c_str()) != 0) {
             throw std::runtime_error("Cannot delete file");
         }
         std::string response = create_http_response("File deleted successfully", "text/plain");

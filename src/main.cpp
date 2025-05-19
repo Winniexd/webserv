@@ -25,7 +25,6 @@ int main() {
         if (getcwd(cwd, sizeof(cwd)) == NULL) { //La fonction getcwd() copie le chemin d'accès absolu du répertoire de travail courant dans la chaîne pointée par buf, qui est de longueur size. 
             throw std::runtime_error("Cannot get current working directory");
         }
-
         std::string root_path = server_config.locations.at("/").root;
         if (!root_path.empty() && root_path[root_path.size() - 1] == ';') {
             root_path.erase(root_path.size() - 1);

@@ -1,0 +1,19 @@
+Gestion des requêtes:
+    Parser les requêtes HTTP
+    Extraire la méthode, le chemin et les en-têtes
+    Gérer les différentes méthodes (GET, POST, DELETE)
+
+Gestion des fichiers:
+    Vérifier les permissions
+    Gérer les différents types MIME
+    Implémenter le listing des répertoires
+
+CGI:
+    Créer un processus fils pour exécuter les scripts
+    Gérer les variables d'environnement
+    Transmettre les données entre le serveur et le script
+
+Sécurité:
+    Valider les chemins de fichiers
+    Limiter la taille des requêtes
+    Gérer les timeouts

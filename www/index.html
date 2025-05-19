@@ -49,16 +49,19 @@
                 document.getElementById('upload-result').textContent = "Aucun fichier sélectionné.";
                 return;
             }
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            fetch('/upload', {
-                method: 'POST',
-                body: formData
-            })
-            .then(r => r.text().then(t => {
-                document.getElementById('upload-result').textContent = t;
-            }))
-            .catch(e => document.getElementById('upload-result').textContent = e);
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                fetch('/upload/' + encodeURIComponent(file.name), {
+                    method: 'POST',
+                    body: e.target.result
+                })
+                .then(r => r.text().then(t => {
+                    document.getElementById('upload-result').textContent = t;
+                }))
+                .catch(e => document.getElementById('upload-result').textContent = e);
+            };
+            reader.readAsArrayBuffer(file);
         }
 
         function doDelete() {

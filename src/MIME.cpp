@@ -19,14 +19,8 @@ void MIME::init_mime_types() {
     mime_types_["jpg"] = "image/jpeg";
     mime_types_["jpeg"] = "image/jpeg";
     mime_types_["png"] = "image/png";
-    mime_types_["gif"] = "image/gif";
     mime_types_["svg"] = "image/svg+xml";
     mime_types_["ico"] = "image/x-icon";
-    
-    // Audio/Video
-    mime_types_["mp3"] = "audio/mpeg";
-    mime_types_["mp4"] = "video/mp4";
-    mime_types_["wav"] = "audio/wav";
     
     // Documents
     mime_types_["pdf"] = "application/pdf";

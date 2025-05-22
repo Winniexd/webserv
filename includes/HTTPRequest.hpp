@@ -32,6 +32,7 @@ std::string create_error_response(int status_code, const std::string& message);
 void handle_get_request(const std::string& path, int client_fd, const std::string& base_path);
 void handle_post_request(const HTTPRequest& request, int client_fd, const std::string& base_path);
 void handle_delete_request(const std::string& path, int client_fd, const std::string& base_path);
+void handle_cgi_request(const HTTPRequest &request, int client_fd);
 std::string find_uploaded_file(const std::string& filename, const std::string& base_path);
 
 #endif

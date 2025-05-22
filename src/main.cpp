@@ -69,11 +69,23 @@ int main(int argc, char **argv) {
                             // Trouve l'index du serveur pour ce client
                             size_t server_idx = client_to_server[fd];
                             const ServerConfig& server_conf = servers[server_idx];
+                            //for (std::map<std::string, Location>::const_iterator it = server_conf.locations.begin(); it != server_conf.locations.end(); it++) {
+                            //    std::cout << "path: " << it->first << std::endl;
+                            //    std::cout << "index: " << it->second.index << std::endl;
+                            //    std::cout << "cgi extension: " << it->second.cgi_extension << std::endl;
+                            //    std::cout << "root: " << it->second.root << std::endl;
+                            //    std::cout << "upload: " << it->second.upload << std::endl << std::endl;
+                            //}
 
                             // Détermine la location
                             std::string location = "/";
-                            if (server_conf.locations.find(path) != server_conf.locations.end())
-                                location = path;
+                            for (std::map<std::string, Location>::const_iterator it = server_conf.locations.begin(); it != server_conf.locations.end(); it++) {
+                                std::string loc_path = it->first;
+                                if (path.find(loc_path) == 0) {
+                                    if (loc_path.size() > location.size())
+                                        location = loc_path;
+                                }
+                            }
                             const Location& loc = server_conf.locations.at(location);
 
                             bool method_allowed = false;
@@ -86,13 +98,16 @@ int main(int argc, char **argv) {
                             }
 
                             std::string root_path = loc.root;
+                           
                             if (!root_path.empty() && root_path[root_path.size() - 1] == ';')
                                 root_path.erase(root_path.size() - 1);
                             std::string base_path = std::string(cwd) + root_path;
-
                             if (!method_allowed) {
                                 std::string error = create_error_response(405, "Method Not Allowed");
                                 send(fd, error.c_str(), error.length(), 0);
+                            }
+                            else if (location == "/cgi-bin") {
+                                handle_cgi_request(request, fd);
                             }
                             else if (method == "GET") {
                                 handle_get_request(path, fd, base_path);

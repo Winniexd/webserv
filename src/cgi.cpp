@@ -15,7 +15,7 @@
 Cgi::Cgi() {
     char buffer[PATH_MAX];
     getcwd(buffer, PATH_MAX);
-    this->cgi_path = std::string(buffer) + "/cgi-bin/";
+    this->cgi_path = std::string(buffer) + "/www/cgi-bin/";
     this->argv = (char **)malloc(2 * sizeof(char *));
 }
 
@@ -30,6 +30,10 @@ Cgi::~Cgi() {
             free(argv[i]);
         free(argv);
     }
+}
+
+int Cgi::get_out_fd() const {
+    return out_fd[0];
 }
 
 void Cgi::add(const std::string &key, const std::string &value) {
@@ -101,9 +105,9 @@ void Cgi::init_env(const HTTPRequest &request) {
     argv[0] = strdup(exec_path.c_str());
     argv[1] = NULL;
 
-    for (std::size_t i = 0; envp[i]; i++)
-        std::cout << envp[i] << std::endl;
-    std::cout << std::endl;
+    //for (std::size_t i = 0; envp[i]; i++)
+    //    std::cout << envp[i] << std::endl;
+    //std::cout << std::endl;
 }
 
 int Cgi::exec() {
@@ -129,7 +133,7 @@ int Cgi::exec() {
         close(out_fd[1]);
         char* const* null = NULL;
         execve(argv[0], null, envp); //Failing don't know why yet
-        std::cout << "Execve Failed" << std::endl;
+        std::cout << argv[0] << " :Execve Failed" << std::endl;
         exit(1);
     }
     else {

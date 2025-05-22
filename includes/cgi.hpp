@@ -45,7 +45,7 @@ class Cgi {
         Cgi &operator=(const Cgi &src);
         void add(const std::string &key, const std::string &value);
         void convert();
-
+        int get_out_fd() const;
         void init_env(const HTTPRequest &request);
         int exec();
 };

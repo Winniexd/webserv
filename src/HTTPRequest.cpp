@@ -2,6 +2,7 @@
 #include "../includes/Socket.hpp"
 #include "../includes/Config.hpp"
 #include "../includes/MIME.hpp"
+#include "../includes/cgi.hpp"
 #include <sys/stat.h> // pour mkdir
 #include <dirent.h> // pour parcourir les dossiers
 
@@ -120,7 +121,7 @@ void handle_get_request(const std::string& path, int client_fd, const std::strin
         std::string mime_type = MIME::get_type(file_path);
         std::string response = create_http_response(content, mime_type);
         send(client_fd, response.c_str(), response.length(), 0);
-    } 
+    }
     catch (const std::exception&) {
         std::string error = create_error_response(404, "404 Not Found");
         send(client_fd, error.c_str(), error.length(), 0);
@@ -181,6 +182,7 @@ void handle_post_request(const HTTPRequest& request, int client_fd, const std::s
 
         // Chemin complet du fichier à écrire
         std::string upload_path = upload_dir + "/" + filename;
+        std::cout << upload_path << std::endl;
 
         // Écrit le fichier uploadé
         std::ofstream file(upload_path.c_str(), std::ios::binary);
@@ -216,4 +218,30 @@ void handle_delete_request(const std::string& path, int client_fd, const std::st
         std::string error = create_error_response(404, "404 Not Found");
         send(client_fd, error.c_str(), error.length(), 0);
     }
+}
+
+void handle_cgi_request(const HTTPRequest &request, int client_fd) {
+    Cgi cgi;
+    cgi.init_env(request);
+    cgi.exec();
+    int fd = cgi.get_out_fd();
+    if (fd < 0) {
+        throw std::runtime_error("Invalid CGI output file descriptor");
+    }
+    
+    std::string output;
+    char buffer[4096];
+    ssize_t bytes_read;
+
+    while ((bytes_read = read(fd, buffer, sizeof(buffer))) > 0) {
+        output.append(buffer, bytes_read);
+    }
+
+    if (bytes_read < 0) {
+        throw std::runtime_error("Error reading from CGI pipe");
+    }
+    close(fd);
+
+    std::string response = create_http_response(output, "text/html");
+    send(client_fd, response.c_str(), response.length(), 0);
 }

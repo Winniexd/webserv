@@ -1,6 +1,6 @@
+#include "../includes/Config.hpp"
 #include "../includes/HTTPRequest.hpp"
 #include "../includes/Socket.hpp"
-#include "../includes/Config.hpp"
 #include "../includes/MIME.hpp"
 #include "../includes/cgi.hpp"
 #include <sys/stat.h> // pour mkdir
@@ -89,21 +89,47 @@ std::string create_http_response(const std::string& content, const std::string& 
 }
 
 // Creates an error HTTP response with custom status code
-std::string create_error_response(int status_code, const std::string& message) {
-    std::stringstream response;
-    response << "HTTP/1.1 " << status_code << " " << message << "\r\n"
-             << "Content-Type: text/plain\r\n"
-             << "Content-Length: " << message.length() << "\r\n"
-             << "\r\n"
-             << message;
-    return response.str();
+std::string create_error_response(int status_code, const std::string& message, const ServerConfig& server_conf) {
+    try {
+        char buffer[PATH_MAX];
+        getcwd(buffer, PATH_MAX);
+        std::string filepath = std::string(buffer) + server_conf.error_pages.at(status_code);
+        std::ifstream error_file(filepath.c_str());
+        if (!error_file.is_open()) {
+            throw std::runtime_error("Failed to open error file: " + filepath);
+        }
+        std::string line, content;
+        while (getline(error_file, line))
+            content += line;
+
+        std::stringstream response;
+        response << "HTTP/1.1 " << status_code << " " << message << "\r\n"
+                 << "Content-Type: text/html\r\n"
+                 << "Content-Length: " << content.size() << "\r\n"
+                 << "\r\n"
+                 << content;
+
+        return response.str();
+    } catch (const std::exception& e) {
+        std::cout << e.what() << std::endl;
+        std::stringstream response;
+        std::ostringstream oss;
+        oss << "Error " << status_code << ": " << message;
+        std::string fallback = oss.str();
+        response << "HTTP/1.1 " << status_code << " " << message << "\r\n"
+                 << "Content-Type: text/plain\r\n"
+                 << "Content-Length: " << fallback.length() << "\r\n"
+                 << "\r\n"
+                 << fallback;
+        return response.str();
+    }
 }
 
 // Handles GET requests:
 // - Serves index.html for root path (/)
 // - Serves requested file for other paths
 // - Returns 404 if file not found
-void handle_get_request(const std::string& path, int client_fd, const std::string& base_path) {
+void handle_get_request(const std::string& path, int client_fd, const std::string& base_path, const ServerConfig& server_conf) {
     try {
         std::string filename = (path == "/" ? "index.html" : path.substr(path.find_last_of('/') + 1));
         std::string file_path;
@@ -123,7 +149,7 @@ void handle_get_request(const std::string& path, int client_fd, const std::strin
         send(client_fd, response.c_str(), response.length(), 0);
     }
     catch (const std::exception&) {
-        std::string error = create_error_response(404, "404 Not Found");
+        std::string error = create_error_response(404, "404 Not Found", server_conf);
         send(client_fd, error.c_str(), error.length(), 0);
     }
 }
@@ -163,7 +189,7 @@ std::string find_uploaded_file(const std::string& filename, const std::string& b
 // - Creates or overwrites file at specified path
 // - Uses request body as file content
 // - Returns 500 if file creation fails
-void handle_post_request(const HTTPRequest& request, int client_fd, const std::string& base_path) {
+void handle_post_request(const HTTPRequest& request, int client_fd, const std::string& base_path, const ServerConfig& server_conf) {
     try {
         // Récupère le nom du fichier à partir du path
         std::string path = request.get_path();
@@ -195,7 +221,7 @@ void handle_post_request(const HTTPRequest& request, int client_fd, const std::s
         send(client_fd, response.c_str(), response.length(), 0);
     }
     catch (const std::exception&) {
-        std::string error = create_error_response(500, "Internal Server Error");
+        std::string error = create_error_response(500, "Internal Server Error", server_conf);
         send(client_fd, error.c_str(), error.length(), 0);
     }
 }
@@ -204,7 +230,7 @@ void handle_post_request(const HTTPRequest& request, int client_fd, const std::s
 // - Removes file at specified path
 // - Returns 200 if successful
 // - Returns 404 if file doesn't exist or can't be deleted
-void handle_delete_request(const std::string& path, int client_fd, const std::string& base_path) {
+void handle_delete_request(const std::string& path, int client_fd, const std::string& base_path, const ServerConfig& server_conf) {
     try {
         std::string filename = path.substr(path.find_last_of('/') + 1);
         std::string file_path = find_uploaded_file(filename, base_path);
@@ -215,12 +241,12 @@ void handle_delete_request(const std::string& path, int client_fd, const std::st
         send(client_fd, response.c_str(), response.length(), 0);
     }
     catch (const std::exception&) {
-        std::string error = create_error_response(404, "404 Not Found");
+        std::string error = create_error_response(404, "404 Not Found", server_conf);
         send(client_fd, error.c_str(), error.length(), 0);
     }
 }
 
-void handle_cgi_request(const HTTPRequest &request, int client_fd) {
+void handle_cgi_request(const HTTPRequest &request, int client_fd, const ServerConfig& server_conf) {
     Cgi cgi;
     cgi.init_env(request);
     cgi.exec();
@@ -242,6 +268,10 @@ void handle_cgi_request(const HTTPRequest &request, int client_fd) {
     }
     close(fd);
 
-    std::string response = create_http_response(output, "text/html");
+    std::string response;
+    if (output.empty())
+        response = create_error_response(500, "Internal Server Error", server_conf);
+    else
+        response = create_http_response(output, "text/html");
     send(client_fd, response.c_str(), response.length(), 0);
 }

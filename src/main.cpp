@@ -103,23 +103,23 @@ int main(int argc, char **argv) {
                                 root_path.erase(root_path.size() - 1);
                             std::string base_path = std::string(cwd) + root_path;
                             if (!method_allowed) {
-                                std::string error = create_error_response(405, "Method Not Allowed");
+                                std::string error = create_error_response(405, "Method Not Allowed", server_conf);
                                 send(fd, error.c_str(), error.length(), 0);
                             }
                             else if (location == "/cgi-bin") {
-                                handle_cgi_request(request, fd);
+                                handle_cgi_request(request, fd, server_conf);
                             }
                             else if (method == "GET") {
-                                handle_get_request(path, fd, base_path);
+                                handle_get_request(path, fd, base_path, server_conf);
                             }
                             else if (method == "POST") {
-                                handle_post_request(request, fd, base_path);
+                                handle_post_request(request, fd, base_path, server_conf);
                             }
                             else if (method == "DELETE") {
-                                handle_delete_request(path, fd, base_path);
+                                handle_delete_request(path, fd, base_path, server_conf);
                             }
                             else {
-                                std::string error = create_error_response(501, "Not Implemented");
+                                std::string error = create_error_response(501, "Not Implemented", server_conf);
                                 send(fd, error.c_str(), error.length(), 0);
                             }
                             // Après avoir répondu, ferme la connexion et retire le client :
@@ -131,8 +131,8 @@ int main(int argc, char **argv) {
                             break;
                         }
                         catch (const std::exception& e) {
-                            std::string error = create_error_response(500, "Internal Server Error");
-                            send(fd, error.c_str(), error.length(), 0);
+                            //std::string error = create_error_response(500, "Internal Server Error",);
+                            //send(fd, error.c_str(), error.length(), 0);
                             // Après avoir répondu, ferme la connexion et retire le client :
                             server_sockets[i]->remove_from_poll(fd);
                             close(fd);

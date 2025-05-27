@@ -6,7 +6,7 @@
 /*   By: winniexd <winniexd@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/26 14:03:44 by pepi              #+#    #+#             */
-/*   Updated: 2025/05/22 12:41:35 by winniexd         ###   ########.fr       */
+/*   Updated: 2025/05/27 13:45:18 by winniexd         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -87,6 +87,8 @@ void Config::parse_file(const std::string& file_path) {
                 int code;
                 std::string path;
                 iss >> code >> path;
+                if (!path.empty() && path[path.size() - 1] == ';')
+                    path.erase(path.size() - 1);
                 current_server.error_pages[code] = path;
             } else if (key == "client_max_body_size") {
                 iss >> current_server.client_max_body_size;

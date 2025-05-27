@@ -28,11 +28,11 @@ private:
 
 std::string read_file(const std::string& path);
 std::string create_http_response(const std::string& content, const std::string& content_type = "text/html");
-std::string create_error_response(int status_code, const std::string& message);
-void handle_get_request(const std::string& path, int client_fd, const std::string& base_path);
-void handle_post_request(const HTTPRequest& request, int client_fd, const std::string& base_path);
-void handle_delete_request(const std::string& path, int client_fd, const std::string& base_path);
-void handle_cgi_request(const HTTPRequest &request, int client_fd);
+std::string create_error_response(int status_code, const std::string& message, const ServerConfig& server_conf);
+void handle_get_request(const std::string& path, int client_fd, const std::string& base_path, const ServerConfig& server_conf);
+void handle_post_request(const HTTPRequest& request, int client_fd, const std::string& base_path, const ServerConfig& server_conf);
+void handle_delete_request(const std::string& path, int client_fd, const std::string& base_path, const ServerConfig& server_conf);
+void handle_cgi_request(const HTTPRequest &request, int client_fd, const ServerConfig& server_conf);
 std::string find_uploaded_file(const std::string& filename, const std::string& base_path);
 
 #endif

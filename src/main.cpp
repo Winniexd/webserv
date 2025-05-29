@@ -66,18 +66,9 @@ int main(int argc, char **argv) {
                             std::string method = request.get_method();
                             std::string path = request.get_path();
 
-                            // Trouve l'index du serveur pour ce client
                             size_t server_idx = client_to_server[fd];
                             const ServerConfig& server_conf = servers[server_idx];
-                            //for (std::map<std::string, Location>::const_iterator it = server_conf.locations.begin(); it != server_conf.locations.end(); it++) {
-                            //    std::cout << "path: " << it->first << std::endl;
-                            //    std::cout << "index: " << it->second.index << std::endl;
-                            //    std::cout << "cgi extension: " << it->second.cgi_extension << std::endl;
-                            //    std::cout << "root: " << it->second.root << std::endl;
-                            //    std::cout << "upload: " << it->second.upload << std::endl << std::endl;
-                            //}
-
-                            // Détermine la location
+                          
                             std::string location = "/";
                             for (std::map<std::string, Location>::const_iterator it = server_conf.locations.begin(); it != server_conf.locations.end(); it++) {
                                 std::string loc_path = it->first;
@@ -131,9 +122,6 @@ int main(int argc, char **argv) {
                             break;
                         }
                         catch (const std::exception& e) {
-                            //std::string error = create_error_response(500, "Internal Server Error",);
-                            //send(fd, error.c_str(), error.length(), 0);
-                            // Après avoir répondu, ferme la connexion et retire le client :
                             server_sockets[i]->remove_from_poll(fd);
                             close(fd);
                             client_to_server.erase(fd);

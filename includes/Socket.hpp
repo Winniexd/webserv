@@ -25,7 +25,6 @@ public:
     int get_fd() const;
     
     // Configure le socket en mode non-bloquant
-    void set_non_blocking();
     
     // Ajouter ces méthodes
     void add_to_poll(int fd);              // Ajoute un FD à surveiller

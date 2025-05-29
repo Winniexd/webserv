@@ -105,9 +105,7 @@ void Cgi::init_env(const HTTPRequest &request) {
     argv[0] = strdup(exec_path.c_str());
     argv[1] = NULL;
 
-    //for (std::size_t i = 0; envp[i]; i++)
-    //    std::cout << envp[i] << std::endl;
-    //std::cout << std::endl;
+  
 }
 
 int Cgi::exec() {
@@ -115,9 +113,7 @@ int Cgi::exec() {
         std::cerr << "Pipe failed!" << std::endl;
         return 1;
     }
-    //std::cout << argv[0] << std::endl;
-    //std::cout << argv[1] << std::endl;
-
+    
     pid_t pid = fork();
     if (pid < 0) {
         std::cerr << "Fork failed!" << std::endl;

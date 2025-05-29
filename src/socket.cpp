@@ -16,8 +16,7 @@
 // Constructeur de la classe Socket
 // Initialise le socket, le configure en mode non-bloquant, le lie à une adresse et commence à écouter
 Socket::Socket(int port, const std::string& host) : port_(port), host_(host) {
-    create_socket();       // Crée le socket
-    set_non_blocking();    // Configure le socket en mode non-bloquant
+    create_socket();       // Crée le socket   // Configure le socket en mode non-bloquant
     bind_socket();         // Lie le socket à une adresse et un port
     listen_socket();       // Met le socket en mode écoute
     std::cout << "Socket created and listening on " << host_ << ":" << port_ << std::endl;
@@ -34,23 +33,6 @@ Socket::~Socket() {
 // Retourne le descripteur de fichier du socket
 int Socket::get_fd() const {
     return fd_;
-}
-
-// Configure le socket en mode non-bloquant
-void Socket::set_non_blocking() {
-    fd_set read_fds;
-    FD_ZERO(&read_fds);
-    FD_SET(fd_, &read_fds);
-    
-    // Configure un timeout de 0 pour le mode non-bloquant
-    struct timeval timeout;
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 0;
-    
-    // Utilise select pour configurer le mode non-bloquant
-    if (select(fd_ + 1, &read_fds, NULL, NULL, &timeout) < 0) {
-        throw std::runtime_error("Failed to set socket non-blocking");
-    }
 }
 
 // Crée un socket

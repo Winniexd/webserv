@@ -8,13 +8,18 @@
 
 class HTTPRequest {
 public:
-    HTTPRequest(const std::string& raw_request);
+    HTTPRequest(const std::string& raw_request, int fd, const ServerConfig& server_conf);
     
     std::string get_method() const;
     std::string get_path() const;
     std::string get_version() const;
     std::string get_header(const std::string& key) const;
     std::string get_body() const;
+    void handle_request(std::string base_path, std::string location);
+    void handle_cgi_request();
+    void handle_get_request(const std::string& base_path);
+    void handle_post_request(const std::string& base_path);
+    void handle_delete_request(const std::string& base_path);
 
 private:
     std::string method_;
@@ -22,7 +27,9 @@ private:
     std::string version_;
     std::map<std::string, std::string> headers_;
     std::string body_;
-    
+    int fd;
+    ServerConfig server_conf;
+
     void parse_request(const std::string& raw_request);
 };
 

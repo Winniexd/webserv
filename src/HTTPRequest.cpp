@@ -7,7 +7,9 @@
 #include <dirent.h> // pour parcourir les dossiers
 
 // Parses raw HTTP request string into structured data
-HTTPRequest::HTTPRequest(const std::string& raw_request) {
+HTTPRequest::HTTPRequest(const std::string& raw_request, int fd, const ServerConfig& server_conf) {
+    this->fd = fd;
+    this->server_conf = server_conf;
     parse_request(raw_request);
 }
 
@@ -129,28 +131,28 @@ std::string create_error_response(int status_code, const std::string& message, c
 // - Serves index.html for root path (/)
 // - Serves requested file for other paths
 // - Returns 404 if file not found
-void handle_get_request(const std::string& path, int client_fd, const std::string& base_path, const ServerConfig& server_conf) {
+void HTTPRequest::handle_get_request(const std::string& base_path) {
     try {
-        std::string filename = (path == "/" ? "index.html" : path.substr(path.find_last_of('/') + 1));
+        std::string filename = (path_ == "/" ? "index.html" : path_.substr(path_.find_last_of('/') + 1));
         std::string file_path;
 
         // Si on est dans le dossier d'upload, cherche dans les sous-dossiers MIME
-        if (path.find("/upload") == 0 || path.find("/uploads") == 0) {
+        if (path_.find("/upload") == 0 || path_.find("/uploads") == 0) {
             file_path = find_uploaded_file(filename, base_path);
             if (file_path.empty())
                 throw std::runtime_error("Not found");
         } else {
-            file_path = base_path + (path == "/" ? "/index.html" : path);
+            file_path = base_path + (path_ == "/" ? "/index.html" : path_);
         }
 
         std::string content = read_file(file_path);
         std::string mime_type = MIME::get_type(file_path);
         std::string response = create_http_response(content, mime_type);
-        send(client_fd, response.c_str(), response.length(), 0);
+        send(fd, response.c_str(), response.length(), 0);
     }
     catch (const std::exception&) {
         std::string error = create_error_response(404, "404 Not Found", server_conf);
-        send(client_fd, error.c_str(), error.length(), 0);
+        send(fd, error.c_str(), error.length(), 0);
     }
 }
 
@@ -189,12 +191,11 @@ std::string find_uploaded_file(const std::string& filename, const std::string& b
 // - Creates or overwrites file at specified path
 // - Uses request body as file content
 // - Returns 500 if file creation fails
-void handle_post_request(const HTTPRequest& request, int client_fd, const std::string& base_path, const ServerConfig& server_conf) {
+void HTTPRequest::handle_post_request(const std::string& base_path) {
     try {
         // Récupère le nom du fichier à partir du path
-        std::string path = request.get_path();
-        std::string::size_type slash = path.find_last_of('/');
-        std::string filename = (slash != std::string::npos) ? path.substr(slash + 1) : path;
+        std::string::size_type slash = path_.find_last_of('/');
+        std::string filename = (slash != std::string::npos) ? path_.substr(slash + 1) : path_;
 
         // Détermine le type MIME
         std::string mime = MIME::get_type(filename);
@@ -214,15 +215,15 @@ void handle_post_request(const HTTPRequest& request, int client_fd, const std::s
         std::ofstream file(upload_path.c_str(), std::ios::binary);
         if (!file)
             throw std::runtime_error("Cannot create file");
-        file << request.get_body();
+        file << body_;
         file.close();
 
         std::string response = create_http_response("File uploaded successfully", "text/plain");
-        send(client_fd, response.c_str(), response.length(), 0);
+        send(fd, response.c_str(), response.length(), 0);
     }
     catch (const std::exception&) {
         std::string error = create_error_response(500, "Internal Server Error", server_conf);
-        send(client_fd, error.c_str(), error.length(), 0);
+        send(fd, error.c_str(), error.length(), 0);
     }
 }
 
@@ -230,48 +231,80 @@ void handle_post_request(const HTTPRequest& request, int client_fd, const std::s
 // - Removes file at specified path
 // - Returns 200 if successful
 // - Returns 404 if file doesn't exist or can't be deleted
-void handle_delete_request(const std::string& path, int client_fd, const std::string& base_path, const ServerConfig& server_conf) {
+void HTTPRequest::handle_delete_request(const std::string& base_path) {
     try {
-        std::string filename = path.substr(path.find_last_of('/') + 1);
+        std::string filename = path_.substr(path_.find_last_of('/') + 1);
         std::string file_path = find_uploaded_file(filename, base_path);
         if (file_path.empty() || remove(file_path.c_str()) != 0) {
             throw std::runtime_error("Cannot delete file");
         }
         std::string response = create_http_response("File deleted successfully", "text/plain");
-        send(client_fd, response.c_str(), response.length(), 0);
+        send(fd, response.c_str(), response.length(), 0);
     }
     catch (const std::exception&) {
         std::string error = create_error_response(404, "404 Not Found", server_conf);
-        send(client_fd, error.c_str(), error.length(), 0);
+        send(fd, error.c_str(), error.length(), 0);
     }
 }
 
-void handle_cgi_request(const HTTPRequest &request, int client_fd, const ServerConfig& server_conf) {
+void HTTPRequest::handle_cgi_request() {
     Cgi cgi;
-    cgi.init_env(request);
-    cgi.exec();
-    int fd = cgi.get_out_fd();
-    if (fd < 0) {
-        throw std::runtime_error("Invalid CGI output file descriptor");
-    }
-    
-    std::string output;
-    char buffer[4096];
-    ssize_t bytes_read;
+    int cgi_fd = -1;
+    try {
+        if (cgi.init_env(*this))
+            throw std::runtime_error("CGI Init Failed");
 
-    while ((bytes_read = read(fd, buffer, sizeof(buffer))) > 0) {
-        output.append(buffer, bytes_read);
-    }
+        if (cgi.exec())
+            throw std::runtime_error("CGI Exec Failed");
 
-    if (bytes_read < 0) {
-        throw std::runtime_error("Error reading from CGI pipe");
-    }
-    close(fd);
+        cgi_fd = cgi.get_out_fd();
+        if (cgi_fd < 0)
+            throw std::runtime_error("Invalid CGI output file descriptor");
 
-    std::string response;
-    if (output.empty())
-        response = create_error_response(500, "Internal Server Error", server_conf);
-    else
-        response = create_http_response(output, "text/html");
-    send(client_fd, response.c_str(), response.length(), 0);
+        std::string output;
+        char buffer[4096];
+        ssize_t bytes_read;
+
+        while ((bytes_read = read(cgi_fd, buffer, sizeof(buffer))) > 0) {
+            output.append(buffer, bytes_read);
+        }
+
+        if (bytes_read < 0) {
+            throw std::runtime_error("Error reading from CGI pipe");
+        }
+        close(cgi_fd);
+
+        std::string response;
+        if (output.empty())
+            throw std::runtime_error("CGI output is empty");
+        else
+            response = create_http_response(output, "text/html");
+
+        send(fd, response.c_str(), response.length(), 0);
+    } catch (const std::exception& e) {
+        if (cgi_fd >= 0)
+            close(cgi_fd);
+        std::cerr << e.what() << std::endl;
+        std::string error = create_error_response(500, "Internal Server Error", server_conf);
+        send(fd, error.c_str(), error.length(), 0);
+    }
+}
+
+void HTTPRequest::handle_request(std::string base_path, std::string location) {
+    if (location == "/cgi-bin") {
+        handle_cgi_request();
+    }
+    else if (method_ == "GET") {
+        handle_get_request(base_path);
+    }
+    else if (method_ == "POST") {
+        handle_post_request(base_path);
+    }
+    else if (method_ == "DELETE") {
+        handle_delete_request(base_path);
+    }
+    else {
+        std::string error = create_error_response(501, "Not Implemented", server_conf);
+        send(fd, error.c_str(), error.length(), 0);
+    }
 }

@@ -62,12 +62,14 @@ int main(int argc, char **argv) {
                             break;
                         }
                         try {
-                            HTTPRequest request(buffer);
+                            size_t server_idx = client_to_server[fd];
+                            const ServerConfig& server_conf = servers[server_idx];
+
+                            HTTPRequest request(buffer, fd, server_conf);
                             std::string method = request.get_method();
                             std::string path = request.get_path();
 
-                            size_t server_idx = client_to_server[fd];
-                            const ServerConfig& server_conf = servers[server_idx];
+
                           
                             std::string location = "/";
                             for (std::map<std::string, Location>::const_iterator it = server_conf.locations.begin(); it != server_conf.locations.end(); it++) {
@@ -97,22 +99,7 @@ int main(int argc, char **argv) {
                                 std::string error = create_error_response(405, "Method Not Allowed", server_conf);
                                 send(fd, error.c_str(), error.length(), 0);
                             }
-                            else if (location == "/cgi-bin") {
-                                handle_cgi_request(request, fd, server_conf);
-                            }
-                            else if (method == "GET") {
-                                handle_get_request(path, fd, base_path, server_conf);
-                            }
-                            else if (method == "POST") {
-                                handle_post_request(request, fd, base_path, server_conf);
-                            }
-                            else if (method == "DELETE") {
-                                handle_delete_request(path, fd, base_path, server_conf);
-                            }
-                            else {
-                                std::string error = create_error_response(501, "Not Implemented", server_conf);
-                                send(fd, error.c_str(), error.length(), 0);
-                            }
+                            else request.handle_request(base_path, location);
                             // Après avoir répondu, ferme la connexion et retire le client :
                             server_sockets[i]->remove_from_poll(fd);
                             close(fd);

@@ -12,23 +12,29 @@
 
 #include "../includes/cgi.hpp"
 
-Cgi::Cgi() {
+Cgi::Cgi(): argv(NULL), envp(NULL) {
     char buffer[PATH_MAX];
     getcwd(buffer, PATH_MAX);
-    this->cgi_path = std::string(buffer) + "/www/cgi-bin/";
-    this->argv = (char **)malloc(2 * sizeof(char *));
+    cgi_path = std::string(buffer) + "/www/cgi-bin/";
+    argv = (char **)malloc(2 * sizeof(char *));
+    argv[0] = NULL;
+    argv[1] = NULL;
 }
 
 Cgi::~Cgi() {
-    if (envp) {
-        for (int i = 0; envp[i]; i++)
-            free(envp[i]);
-        free(envp);
-    }
     if (argv) {
-        for (int i = 0; argv[i]; i++)
+        for (int i = 0; argv[i]; ++i) {
             free(argv[i]);
+        }
         free(argv);
+        argv = NULL;
+    }
+    if (envp) {
+        for (int i = 0; envp[i]; ++i) {
+            free(envp[i]);
+        }
+        free(envp);
+        envp = NULL;
     }
 }
 
@@ -52,13 +58,13 @@ void Cgi::convert() {
     this->envp[env.size()] = NULL;
 }
 
-void Cgi::init_env(const HTTPRequest &request) {
+int Cgi::init_env(const HTTPRequest &request) {
     std::string request_path = request.get_path();
     std::string cgi_dir = "/cgi-bin/";
 
     if (request_path.empty()) {
         std::cerr << "Request path is empty!" << std::endl;
-        return ;
+        return 1;
     }
     
     if (request_path[0] != '/') //Checks if path is relative, if so make the path absolute
@@ -67,17 +73,26 @@ void Cgi::init_env(const HTTPRequest &request) {
         size_t pos = request_path.find(cgi_dir);
         if (pos == std::string::npos) { //check if the absolute path contains the cgi-bin directory
             std::cerr << "CGI path must contain: " << cgi_dir << std::endl;
-            return ;
+            return 1;
         }
         if (pos != 0) {
             std::cerr << "CGI path must start with: " << cgi_dir << std::endl;
-            return ;
+            return 1;
         }
         exec_path = cgi_path + request_path.substr(cgi_dir.length());
+        std::cout << exec_path << std::endl;
+        if (*exec_path.rbegin() == '/') {
+            std::cerr << "Requested file appears to be a directory (ends with '/'): " << exec_path << std::endl;
+            return 1;
+        }
+        if (access(exec_path.c_str(), F_OK | X_OK) != 0) {
+            std::cerr << "CGI script not found or not executable: " << exec_path << std::endl;
+            return 1;
+        }
     }
     if (request_path.find("..") != std::string::npos) {
         std::cerr << "Path traversal is not allowed" << std::endl;
-        return ;
+        return 1;
     }
     std::string host = request.get_header("host");
     size_t pos = host.find(":");
@@ -104,8 +119,7 @@ void Cgi::init_env(const HTTPRequest &request) {
     convert(); //Convert env to char array for execve
     argv[0] = strdup(exec_path.c_str());
     argv[1] = NULL;
-
-  
+    return 0;
 }
 
 int Cgi::exec() {
@@ -127,8 +141,7 @@ int Cgi::exec() {
         close(in_fd[1]);
         close(out_fd[0]);
         close(out_fd[1]);
-        char* const* null = NULL;
-        execve(argv[0], null, envp); //Failing don't know why yet
+        execve(argv[0], argv, envp);
         std::cout << argv[0] << " :Execve Failed" << std::endl;
         exit(1);
     }

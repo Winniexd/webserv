@@ -16,7 +16,7 @@
     <div class="container">
         <div class="block">
             <h2>GET</h2>
-            <input type="text" id="get-path" placeholder="/upload/newfile.txt" value="/upload/newfile.txt">
+            <input type="text" id="get-path" placeholder="/uploads/test.txt" value="/uploads/test.txt">
             <button onclick="doGet()">Envoyer GET</button>
             <pre id="get-result"></pre>
         </div>
@@ -28,7 +28,7 @@
         </div>
         <div class="block">
             <h2>DELETE</h2>
-            <input type="text" id="delete-path" placeholder="/upload/newfile.txt" value="/upload/newfile.txt">
+            <input type="text" id="delete-path" placeholder="/uploads/test.txt" value="/uploads/test.txt">
             <button onclick="doDelete()">Envoyer DELETE</button>
             <pre id="delete-result"></pre>
         </div>
@@ -52,7 +52,7 @@
             const file = fileInput.files[0];
             const reader = new FileReader();
             reader.onload = function(e) {
-                fetch('/upload/' + encodeURIComponent(file.name), {
+                fetch('/uploads/' + encodeURIComponent(file.name), {
                     method: 'POST',
                     body: e.target.result
                 })

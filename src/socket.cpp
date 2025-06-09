@@ -71,7 +71,7 @@ void Socket::bind_socket() {
 // Met le socket en mode écoute
 void Socket::listen_socket() {
     // Définit le socket pour écouter les connexions entrantes
-    if (listen(fd_, SOMAXCONN) < 0) {
+    if (listen(fd_, SOMAXCONN) < 0) { //SOMAXCONN est une constante qui définit le nombre maximum de connexions en attente (128)
         throw std::runtime_error("Failed to listen on socket"); // Erreur si l'écoute échoue
     }
 }

@@ -51,7 +51,7 @@ std::string get_current_working_directory() {
 void accept_new_connections(Socket* socket, std::vector<ServerConfig>::size_type server_index, 
                            std::vector<int>& client_fds, 
                            std::map<int, std::vector<ServerConfig>::size_type>& client_to_server) {
-    if (socket->wait_for_events(0) > 0 && socket->can_read(socket->get_fd())) {
+    if (socket->can_read(socket->get_fd())) {
         int client_fd = accept(socket->get_fd(), NULL, NULL);
         if (client_fd > 0) {
             socket->add_to_poll(client_fd);
@@ -136,10 +136,16 @@ void process_client_request(int client_fd, Socket* socket,
 
         if (!is_method_allowed(method, loc)) {
             std::string error = create_error_response(405, "Method Not Allowed", server_conf);
-            send(client_fd, error.c_str(), error.length(), 0);
+            // Only send if can_write
+            if (socket->can_write(client_fd)) {
+                send(client_fd, error.c_str(), error.length(), 0);
+            }
         } else {
             std::string base_path = build_base_path(cwd, loc.root);
-            request.handle_request(base_path, location);
+            // You must ensure handle_request only writes after can_write
+            if (socket->can_write(client_fd)) {
+                request.handle_request(base_path, location, socket);
+            }
         }
         cleanup_client(client_fd, socket, client_fds, client_to_server, it);
     } catch (const std::exception& e) {
@@ -153,14 +159,19 @@ void run_server_loop(const std::vector<ServerConfig>& servers,
                     const std::string& cwd) {
     std::vector<int> client_fds;
     std::map<int, std::vector<ServerConfig>::size_type> client_to_server;
-
+    
     while (keep_running) {
+        // Wait for events on all fds (listening + clients) for each server
+        for (std::vector<Socket*>::size_type i = 0; i < server_sockets.size(); ++i) {
+            server_sockets[i]->wait_for_events(0);
+        }
+
         // Accept new connections
         for (std::vector<Socket*>::size_type i = 0; i < server_sockets.size(); ++i) {
             accept_new_connections(server_sockets[i], i, client_fds, client_to_server);
         }
 
-        // Process existing clients
+        // Process existing clients 
         for (std::vector<int>::iterator it = client_fds.begin(); it != client_fds.end();) {
             int client_fd = *it;
             bool handled = false;

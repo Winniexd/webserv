@@ -8,7 +8,7 @@ class MIME {
 public:
     // Get MIME type for a file extension
     static std::string get_type(const std::string& path);
-    
+   
 private:
     // Initialize MIME types map
     static void init_mime_types();

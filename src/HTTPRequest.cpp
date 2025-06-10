@@ -6,6 +6,43 @@
 #include <sys/stat.h> // pour mkdir
 #include <dirent.h> // pour parcourir les dossiers
 
+static std::string safe_mime_dir(const std::string& mime) {
+    std::string dir = mime;
+    size_t i;
+    for (i = 0; i < dir.size(); ++i) {
+        if (dir[i] == '/')
+            dir[i] = '_';
+    }
+    return dir;
+}
+
+//find path of file recursively 
+std::string find_uploaded_file(const std::string& filename, const std::string& base_path) {
+    DIR* dir = opendir(base_path.c_str());
+    if (!dir)
+        return "";
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type == DT_DIR) { //DT_DIR for directories
+            std::string name = entry->d_name;
+            if (name != "." && name != "..") {
+                std::string found = find_uploaded_file(filename, base_path + "/" + name);
+                if (!found.empty()) {
+                    closedir(dir);
+                    return found;
+                }
+            }
+        } else if (entry->d_type == DT_REG) { // DT_REG for regular files
+            if (filename == entry->d_name) {
+                closedir(dir);
+                return base_path + "/" + filename;
+            }
+        }
+    }
+    closedir(dir);
+    return "";
+}
+
 // Parses raw HTTP request string into structured data
 HTTPRequest::HTTPRequest(const std::string& raw_request, int fd, const ServerConfig& server_conf) {
     this->fd = fd;
@@ -131,12 +168,11 @@ std::string create_error_response(int status_code, const std::string& message, c
 // - Serves index.html for root path (/)
 // - Serves requested file for other paths
 // - Returns 404 if file not found
-void HTTPRequest::handle_get_request(const std::string& base_path) {
+void HTTPRequest::handle_get_request(const std::string& base_path, Socket* socket) {
     try {
         std::string filename = (path_ == "/" ? "index.html" : path_.substr(path_.find_last_of('/') + 1));
         std::string file_path;
 
-        // Si on est dans le dossier d'upload, cherche dans les sous-dossiers MIME
         if (path_.find("/upload") == 0 || path_.find("/uploads") == 0) {
             file_path = find_uploaded_file(filename, base_path);
             if (file_path.empty())
@@ -148,70 +184,26 @@ void HTTPRequest::handle_get_request(const std::string& base_path) {
         std::string content = read_file(file_path);
         std::string mime_type = MIME::get_type(file_path);
         std::string response = create_http_response(content, mime_type);
-        send(fd, response.c_str(), response.length(), 0);
+        if (socket->can_write(fd))
+            send(fd, response.c_str(), response.length(), 0);
     }
     catch (const std::exception&) {
         std::string error = create_error_response(404, "404 Not Found", server_conf);
-        send(fd, error.c_str(), error.length(), 0);
+        if (socket->can_write(fd))
+            send(fd, error.c_str(), error.length(), 0);
     }
 }
 
-// Remplace les '/' par '_' pour les noms de dossiers valides (C++98)
-static std::string safe_mime_dir(const std::string& mime) {
-    std::string dir = mime;
-    for (std::string::size_type i = 0; i < dir.size(); ++i)
-        if (dir[i] == '/')
-            dir[i] = '_';
-    return dir;
-}
-
-// Cherche le fichier dans tous les sous-dossiers MIME de base_path
-std::string find_uploaded_file(const std::string& filename, const std::string& base_path) {
-    DIR* dir = opendir(base_path.c_str());
-    if (!dir) return "";
-
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != NULL) {
-        // Ignore . et ..
-        if (entry->d_type == DT_DIR && std::string(entry->d_name) != "." && std::string(entry->d_name) != "..") {
-            std::string subdir = base_path + "/" + entry->d_name;
-            std::string candidate = subdir + "/" + filename;
-            std::ifstream file(candidate.c_str(), std::ios::binary);
-            if (file.is_open()) {
-                closedir(dir);
-                return candidate;
-            }
-        }
-    }
-    closedir(dir);
-    return ""; // Not found
-}
-
-// Handles POST requests:
-// - Creates or overwrites file at specified path
-// - Uses request body as file content
-// - Returns 500 if file creation fails
-void HTTPRequest::handle_post_request(const std::string& base_path) {
+void HTTPRequest::handle_post_request(const std::string& base_path, Socket* socket) {
     try {
-        // Récupère le nom du fichier à partir du path
         std::string::size_type slash = path_.find_last_of('/');
         std::string filename = (slash != std::string::npos) ? path_.substr(slash + 1) : path_;
-
-        // Détermine le type MIME
         std::string mime = MIME::get_type(filename);
-
-        // Crée un sous-dossier pour chaque type MIME (ex: image_jpeg)
         std::string subdir = safe_mime_dir(mime);
         std::string upload_dir = base_path + "/" + subdir;
-
-        // Crée le dossier s'il n'existe pas
         mkdir(upload_dir.c_str(), 0777);
-
-        // Chemin complet du fichier à écrire
         std::string upload_path = upload_dir + "/" + filename;
         std::cout << upload_path << std::endl;
-
-        // Écrit le fichier uploadé
         std::ofstream file(upload_path.c_str(), std::ios::binary);
         if (!file)
             throw std::runtime_error("Cannot create file");
@@ -219,19 +211,17 @@ void HTTPRequest::handle_post_request(const std::string& base_path) {
         file.close();
 
         std::string response = create_http_response("File uploaded successfully", "text/plain");
-        send(fd, response.c_str(), response.length(), 0);
+        if (socket->can_write(fd))
+            send(fd, response.c_str(), response.length(), 0);
     }
     catch (const std::exception&) {
         std::string error = create_error_response(500, "Internal Server Error", server_conf);
-        send(fd, error.c_str(), error.length(), 0);
+        if (socket->can_write(fd))
+            send(fd, error.c_str(), error.length(), 0);
     }
 }
 
-// Handles DELETE requests:
-// - Removes file at specified path
-// - Returns 200 if successful
-// - Returns 404 if file doesn't exist or can't be deleted
-void HTTPRequest::handle_delete_request(const std::string& base_path) {
+void HTTPRequest::handle_delete_request(const std::string& base_path, Socket* socket) {
     try {
         std::string filename = path_.substr(path_.find_last_of('/') + 1);
         std::string file_path = find_uploaded_file(filename, base_path);
@@ -239,15 +229,17 @@ void HTTPRequest::handle_delete_request(const std::string& base_path) {
             throw std::runtime_error("Cannot delete file");
         }
         std::string response = create_http_response("File deleted successfully", "text/plain");
-        send(fd, response.c_str(), response.length(), 0);
+        if (socket->can_write(fd))
+            send(fd, response.c_str(), response.length(), 0);
     }
     catch (const std::exception&) {
         std::string error = create_error_response(404, "404 Not Found", server_conf);
-        send(fd, error.c_str(), error.length(), 0);
+        if (socket->can_write(fd))
+            send(fd, error.c_str(), error.length(), 0);
     }
 }
 
-void HTTPRequest::handle_cgi_request() {
+void HTTPRequest::handle_cgi_request(Socket* socket) {
     Cgi cgi;
     int cgi_fd = -1;
     try {
@@ -280,31 +272,34 @@ void HTTPRequest::handle_cgi_request() {
         else
             response = create_http_response(output, "text/html");
 
-        send(fd, response.c_str(), response.length(), 0);
+        if (socket->can_write(fd))
+            send(fd, response.c_str(), response.length(), 0);
     } catch (const std::exception& e) {
         if (cgi_fd >= 0)
             close(cgi_fd);
         std::cerr << e.what() << std::endl;
         std::string error = create_error_response(500, "Internal Server Error", server_conf);
-        send(fd, error.c_str(), error.length(), 0);
+        if (socket->can_write(fd))
+            send(fd, error.c_str(), error.length(), 0);
     }
 }
 
-void HTTPRequest::handle_request(std::string base_path, std::string location) {
+void HTTPRequest::handle_request(std::string base_path, std::string location, Socket* socket) {
     if (location == "/cgi-bin") {
-        handle_cgi_request();
+        handle_cgi_request(socket);
     }
     else if (method_ == "GET") {
-        handle_get_request(base_path);
+        handle_get_request(base_path, socket);
     }
     else if (method_ == "POST") {
-        handle_post_request(base_path);
+        handle_post_request(base_path, socket);
     }
     else if (method_ == "DELETE") {
-        handle_delete_request(base_path);
+        handle_delete_request(base_path, socket);
     }
     else {
         std::string error = create_error_response(501, "Not Implemented", server_conf);
-        send(fd, error.c_str(), error.length(), 0);
+        if (socket->can_write(fd))
+            send(fd, error.c_str(), error.length(), 0);
     }
 }

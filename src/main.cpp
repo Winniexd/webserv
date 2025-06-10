@@ -111,7 +111,8 @@ void process_client_request(int client_fd, Socket* socket,
                           std::map<int, std::vector<ServerConfig>::size_type>& client_to_server,
                           std::vector<int>& client_fds, 
                           const std::string& cwd,
-                          std::vector<int>::iterator& it, std::map<int, HTTPRequest>& requests) {
+                          std::vector<int>::iterator& it, 
+                          std::map<int, HTTPRequest>& requests) {
 
     char buffer[4096] = {0};
     ssize_t bytes = recv(client_fd, buffer, sizeof(buffer), 0);
@@ -144,10 +145,9 @@ void process_client_request(int client_fd, Socket* socket,
             request.set_handled(true);
         } else {
             std::string base_path = build_base_path(cwd, loc.root);
-            // You must ensure handle_request only writes after can_write
             request.handle_request(base_path, location);
         }
-        cleanup_client(client_fd, socket, client_fds, client_to_server, it);
+        ++it; // Just increment iterator
     } catch (const std::exception& e) {
         cleanup_client(client_fd, socket, client_fds, client_to_server, it);
     }
@@ -176,6 +176,7 @@ void run_server_loop(const std::vector<ServerConfig>& servers,
         for (std::vector<int>::iterator it = client_fds.begin(); it != client_fds.end();) {
             int client_fd = *it;
             bool handled = false;
+            
             for (std::vector<Socket*>::size_type i = 0; i < server_sockets.size(); ++i) {
                 if (server_sockets[i]->can_read(client_fd)) {
                     process_client_request(client_fd, server_sockets[i], servers, 
@@ -183,14 +184,27 @@ void run_server_loop(const std::vector<ServerConfig>& servers,
                     handled = true;
                     break;
                 }
-                if (server_sockets[i]->can_write(client_fd) && requests.find(client_fd) != requests.end() && requests.at(client_fd).get_handled()) {
+                
+                // Add this block back for write handling
+                if (server_sockets[i]->can_write(client_fd) && 
+                    requests.find(client_fd) != requests.end() && 
+                    requests.at(client_fd).get_handled()) {
                     std::string response = requests.at(client_fd).get_response();
-                    send(client_fd, response.c_str(), response.length(), 0);
-                    requests.erase(client_fd);
+                    ssize_t sent = send(client_fd, response.c_str(), response.length(), 0);
+                    if (sent <= 0) {
+                        cleanup_client(client_fd, server_sockets[i], client_fds, client_to_server, it);
+                    } else {
+                        requests.erase(client_fd);
+                        ++it;
+                    }
+                    handled = true;
+                    break;
                 }
             }
-            if (!handled)
+            
+            if (!handled) {
                 ++it;
+            }
         }
     }
 }

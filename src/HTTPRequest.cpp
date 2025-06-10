@@ -47,6 +47,7 @@ std::string find_uploaded_file(const std::string& filename, const std::string& b
 HTTPRequest::HTTPRequest(const std::string& raw_request, int fd, const ServerConfig& server_conf) {
     this->fd = fd;
     this->server_conf = server_conf;
+    handled = false;
     parse_request(raw_request);
 }
 
@@ -72,6 +73,22 @@ std::string HTTPRequest::get_header(const std::string& key) const {
 // Returns request body content
 std::string HTTPRequest::get_body() const {
     return body_;
+}
+
+std::string HTTPRequest::get_response() const {
+    return response;
+}
+
+bool HTTPRequest::get_handled() const {
+    return handled;
+}
+
+void HTTPRequest::set_response(const std::string& response) {
+    this->response = response;
+}
+
+void HTTPRequest::set_handled(const bool handled) {
+    this->handled = handled;
 }
 
 // Parses HTTP request following the format:
@@ -168,7 +185,7 @@ std::string create_error_response(int status_code, const std::string& message, c
 // - Serves index.html for root path (/)
 // - Serves requested file for other paths
 // - Returns 404 if file not found
-void HTTPRequest::handle_get_request(const std::string& base_path, Socket* socket) {
+void HTTPRequest::handle_get_request(const std::string& base_path) {
     try {
         std::string filename = (path_ == "/" ? "index.html" : path_.substr(path_.find_last_of('/') + 1));
         std::string file_path;
@@ -183,18 +200,16 @@ void HTTPRequest::handle_get_request(const std::string& base_path, Socket* socke
 
         std::string content = read_file(file_path);
         std::string mime_type = MIME::get_type(file_path);
-        std::string response = create_http_response(content, mime_type);
-        if (socket->can_write(fd))
-            send(fd, response.c_str(), response.length(), 0);
+        response = create_http_response(content, mime_type);
+        handled = true;
     }
     catch (const std::exception&) {
-        std::string error = create_error_response(404, "404 Not Found", server_conf);
-        if (socket->can_write(fd))
-            send(fd, error.c_str(), error.length(), 0);
+        response = create_error_response(404, "404 Not Found", server_conf);
+        handled = true;
     }
 }
 
-void HTTPRequest::handle_post_request(const std::string& base_path, Socket* socket) {
+void HTTPRequest::handle_post_request(const std::string& base_path) {
     try {
         std::string::size_type slash = path_.find_last_of('/');
         std::string filename = (slash != std::string::npos) ? path_.substr(slash + 1) : path_;
@@ -210,36 +225,32 @@ void HTTPRequest::handle_post_request(const std::string& base_path, Socket* sock
         file << body_;
         file.close();
 
-        std::string response = create_http_response("File uploaded successfully", "text/plain");
-        if (socket->can_write(fd))
-            send(fd, response.c_str(), response.length(), 0);
+        response = create_http_response("File uploaded successfully", "text/plain");
+        handled = true;
     }
     catch (const std::exception&) {
-        std::string error = create_error_response(500, "Internal Server Error", server_conf);
-        if (socket->can_write(fd))
-            send(fd, error.c_str(), error.length(), 0);
+        response = create_error_response(500, "Internal Server Error", server_conf);
+        handled = true;
     }
 }
 
-void HTTPRequest::handle_delete_request(const std::string& base_path, Socket* socket) {
+void HTTPRequest::handle_delete_request(const std::string& base_path) {
     try {
         std::string filename = path_.substr(path_.find_last_of('/') + 1);
         std::string file_path = find_uploaded_file(filename, base_path);
         if (file_path.empty() || remove(file_path.c_str()) != 0) {
             throw std::runtime_error("Cannot delete file");
         }
-        std::string response = create_http_response("File deleted successfully", "text/plain");
-        if (socket->can_write(fd))
-            send(fd, response.c_str(), response.length(), 0);
+        response = create_http_response("File deleted successfully", "text/plain");
+        handled = true;
     }
     catch (const std::exception&) {
-        std::string error = create_error_response(404, "404 Not Found", server_conf);
-        if (socket->can_write(fd))
-            send(fd, error.c_str(), error.length(), 0);
+        response = create_error_response(404, "404 Not Found", server_conf);
+        handled = true;
     }
 }
 
-void HTTPRequest::handle_cgi_request(Socket* socket) {
+void HTTPRequest::handle_cgi_request() {
     Cgi cgi;
     int cgi_fd = -1;
     try {
@@ -266,40 +277,36 @@ void HTTPRequest::handle_cgi_request(Socket* socket) {
         }
         close(cgi_fd);
 
-        std::string response;
         if (output.empty())
             throw std::runtime_error("CGI output is empty");
         else
             response = create_http_response(output, "text/html");
 
-        if (socket->can_write(fd))
-            send(fd, response.c_str(), response.length(), 0);
+        handled = true;
     } catch (const std::exception& e) {
         if (cgi_fd >= 0)
             close(cgi_fd);
         std::cerr << e.what() << std::endl;
-        std::string error = create_error_response(500, "Internal Server Error", server_conf);
-        if (socket->can_write(fd))
-            send(fd, error.c_str(), error.length(), 0);
+        response = create_error_response(500, "Internal Server Error", server_conf);
+        handled = true;
     }
 }
 
-void HTTPRequest::handle_request(std::string base_path, std::string location, Socket* socket) {
+void HTTPRequest::handle_request(std::string base_path, std::string location) {
     if (location == "/cgi-bin") {
-        handle_cgi_request(socket);
+        handle_cgi_request();
     }
     else if (method_ == "GET") {
-        handle_get_request(base_path, socket);
+        handle_get_request(base_path);
     }
     else if (method_ == "POST") {
-        handle_post_request(base_path, socket);
+        handle_post_request(base_path);
     }
     else if (method_ == "DELETE") {
-        handle_delete_request(base_path, socket);
+        handle_delete_request(base_path);
     }
     else {
-        std::string error = create_error_response(501, "Not Implemented", server_conf);
-        if (socket->can_write(fd))
-            send(fd, error.c_str(), error.length(), 0);
+        response = create_error_response(501, "Not Implemented", server_conf);
+        handled = true;
     }
 }

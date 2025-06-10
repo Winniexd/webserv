@@ -111,7 +111,8 @@ void process_client_request(int client_fd, Socket* socket,
                           std::map<int, std::vector<ServerConfig>::size_type>& client_to_server,
                           std::vector<int>& client_fds, 
                           const std::string& cwd,
-                          std::vector<int>::iterator& it) {
+                          std::vector<int>::iterator& it, std::map<int, HTTPRequest>& requests) {
+
     char buffer[4096] = {0};
     ssize_t bytes = recv(client_fd, buffer, sizeof(buffer), 0);
     if (bytes <= 0) {
@@ -127,7 +128,11 @@ void process_client_request(int client_fd, Socket* socket,
         }
         std::vector<ServerConfig>::size_type server_idx = server_it->second;
         const ServerConfig& server_conf = servers[server_idx];
-        HTTPRequest request(buffer, client_fd, server_conf);
+
+        if (requests.find(client_fd) == requests.end())
+            requests.insert(std::make_pair(client_fd, HTTPRequest(buffer, client_fd, server_conf)));
+
+        HTTPRequest& request = requests.at(client_fd);
         std::string method = request.get_method();
         std::string path = request.get_path();
 
@@ -135,17 +140,12 @@ void process_client_request(int client_fd, Socket* socket,
         const Location& loc = server_conf.locations.at(location);
 
         if (!is_method_allowed(method, loc)) {
-            std::string error = create_error_response(405, "Method Not Allowed", server_conf);
-            // Only send if can_write
-            if (socket->can_write(client_fd)) {
-                send(client_fd, error.c_str(), error.length(), 0);
-            }
+            request.set_response(create_error_response(405, "Method Not Allowed", server_conf));
+            request.set_handled(true);
         } else {
             std::string base_path = build_base_path(cwd, loc.root);
             // You must ensure handle_request only writes after can_write
-            if (socket->can_write(client_fd)) {
-                request.handle_request(base_path, location, socket);
-            }
+            request.handle_request(base_path, location);
         }
         cleanup_client(client_fd, socket, client_fds, client_to_server, it);
     } catch (const std::exception& e) {
@@ -157,7 +157,8 @@ void process_client_request(int client_fd, Socket* socket,
 void run_server_loop(const std::vector<ServerConfig>& servers, 
                     std::vector<Socket*>& server_sockets, 
                     const std::string& cwd) {
-    std::vector<int> client_fds;
+    std::vector<int> client_fds;    
+    std::map<int, HTTPRequest> requests;
     std::map<int, std::vector<ServerConfig>::size_type> client_to_server;
     
     while (keep_running) {
@@ -178,14 +179,18 @@ void run_server_loop(const std::vector<ServerConfig>& servers,
             for (std::vector<Socket*>::size_type i = 0; i < server_sockets.size(); ++i) {
                 if (server_sockets[i]->can_read(client_fd)) {
                     process_client_request(client_fd, server_sockets[i], servers, 
-                                         client_to_server, client_fds, cwd, it);
+                                         client_to_server, client_fds, cwd, it, requests);
                     handled = true;
                     break;
                 }
+                if (server_sockets[i]->can_write(client_fd) && requests.find(client_fd) != requests.end() && requests.at(client_fd).get_handled()) {
+                    std::string response = requests.at(client_fd).get_response();
+                    send(client_fd, response.c_str(), response.length(), 0);
+                    requests.erase(client_fd);
+                }
             }
-            if (!handled) {
+            if (!handled)
                 ++it;
-            }
         }
     }
 }

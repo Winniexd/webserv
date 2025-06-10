@@ -16,11 +16,15 @@ public:
     std::string get_version() const;
     std::string get_header(const std::string& key) const;
     std::string get_body() const;
-    void handle_request(std::string base_path, std::string location, Socket* socket);
-    void handle_cgi_request(Socket* socket);
-    void handle_get_request(const std::string& base_path, Socket* socket);
-    void handle_post_request(const std::string& base_path, Socket* socket);
-    void handle_delete_request(const std::string& base_path, Socket* socket);
+    std::string get_response() const;
+    void set_response(const std::string& response);
+    void set_handled(const bool handled);
+    bool get_handled() const;
+    void handle_request(std::string base_path, std::string location);
+    void handle_cgi_request();
+    void handle_get_request(const std::string& base_path);
+    void handle_post_request(const std::string& base_path);
+    void handle_delete_request(const std::string& base_path);
 
 private:
     std::string method_;
@@ -30,6 +34,8 @@ private:
     std::string body_;
     int fd;
     ServerConfig server_conf;
+    std::string response;
+    bool handled;
 
     void parse_request(const std::string& raw_request);
 };

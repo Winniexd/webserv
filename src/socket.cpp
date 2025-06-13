@@ -6,7 +6,7 @@
 /*   By: rpepi <rpepi@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/26 17:15:42 by pepi              #+#    #+#             */
-/*   Updated: 2025/05/12 11:24:36 by rpepi            ###   ########.fr       */
+/*   Updated: 2025/06/13 12:21:17 by rpepi            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -42,17 +42,23 @@ void Socket::create_socket() {
         throw std::runtime_error("Failed to create socket");
     }
     
-    // Ajoute le socket principal au poll
-    struct pollfd pfd;
-    pfd.fd = fd_;
-    pfd.events = POLLIN;  // Écoute uniquement les connexions entrantes
-    pfd.revents = 0;
-    poll_fds_.push_back(pfd);
-    
+    // Enable socket reuse
     int opt = 1;
     if (setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        throw std::runtime_error("setsockopt failed");
+        close(fd_);
+        throw std::runtime_error("Failed to set SO_REUSEADDR");
     }
+    if (setsockopt(fd_, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
+        close(fd_);
+        throw std::runtime_error("Failed to set SO_REUSEPORT");
+    }
+
+    // Add socket to poll
+    struct pollfd pfd;
+    pfd.fd = fd_;
+    pfd.events = POLLIN;
+    pfd.revents = 0;
+    poll_fds_.push_back(pfd);
 }
 
 // Lie le socket à une adresse et un port

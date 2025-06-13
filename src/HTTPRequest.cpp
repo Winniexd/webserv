@@ -211,6 +211,13 @@ void HTTPRequest::handle_get_request(const std::string& base_path) {
 
 void HTTPRequest::handle_post_request(const std::string& base_path) {
     try {
+        // Check body size against limit
+        if (body_.length() > server_conf.client_max_body_size) {
+            response = create_error_response(413, "Payload Too Large", server_conf);
+            handled = true;
+            return;
+        }
+
         std::string::size_type slash = path_.find_last_of('/');
         std::string filename = (slash != std::string::npos) ? path_.substr(slash + 1) : path_;
         std::string mime = MIME::get_type(filename);

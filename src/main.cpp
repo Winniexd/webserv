@@ -53,7 +53,7 @@ void accept_new_connections(Socket* socket, std::vector<ServerConfig>::size_type
                            std::map<int, std::vector<ServerConfig>::size_type>& client_to_server) {
     if (socket->can_read(socket->get_fd())) {
         int client_fd = accept(socket->get_fd(), NULL, NULL);
-        if (client_fd > 0) {
+        if (client_fd >= 0) {
             socket->add_to_poll(client_fd);
             client_fds.push_back(client_fd);
             client_to_server[client_fd] = server_index;
